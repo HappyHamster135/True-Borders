@@ -710,48 +710,53 @@ def check_for_updates():
 
 @eel.expose
 def perform_update(download_url):
-    """Laddar ner den nya filen och startar ersättningsskriptet."""
+    """Den garanterade auto-updatern med 'Explorer'-tricket."""
     try:
-        # Detta fungerar bäst om programmet är kompilerat med PyInstaller
         if not getattr(sys, 'frozen', False):
-            print("Körs inte som en kompilerad .exe. Avbryter uppdatering.")
+            print("Körs inte som en kompilerad .exe.")
             return False
 
         current_exe = sys.executable
         exe_dir = os.path.dirname(current_exe)
-        exe_name = os.path.basename(current_exe)
         
-        new_exe_path = os.path.join(exe_dir, "TrueBorders_Update.exe")
-        bat_path = os.path.join(exe_dir, "update.bat")
+        temp_dir = os.environ.get('TEMP', exe_dir)
+        new_exe_path = os.path.join(temp_dir, "TrueBorders_New.exe")
+        bat_path = os.path.join(temp_dir, "update_tb.bat")
 
-        # Ladda ner den nya exe-filen
+        print(f"Laddar ner från: {download_url}")
         urllib.request.urlretrieve(download_url, new_exe_path)
 
-        # Skapa BAT-skriptet som utför bytet
+        if os.path.getsize(new_exe_path) < 1000000:
+            print("Nedladdad fil är för liten (troligen korrupt).")
+            return False
+
         bat_content = f"""@echo off
-            :: Vänta 2 sekunder för att programmet ska hinna stänga ner helt
-            timeout /t 2 /nobreak > NUL
+:: Vantar 3 sekunder sa programmet hinner stanga ner
+ping 127.0.0.1 -n 4 > nul
 
-            :: Radera den gamla filen
-            del "{current_exe}"
+:CopyLoop
+:: Skriv over den gamla filen
+copy /Y "{new_exe_path}" "{current_exe}" > nul 2>&1
+if errorlevel 1 (
+    ping 127.0.0.1 -n 2 > nul
+    goto CopyLoop
+)
 
-            :: Byt namn på den nya filen till det gamla namnet
-            rename "{new_exe_path}" "{exe_name}"
+:: --- SILVER BULLET FIXEN ---
+:: Vi later Windows Utforskare starta filen. Detta raderar ALLA osynliga PyInstaller-variabler!
+explorer.exe "{current_exe}"
 
-            :: Starta den nya filen
-            start "" "{current_exe}"
-
-            :: Radera det här bat-skriptet
-            del "%~f0"
-            """
+:: Stada upp Temp-filerna
+del "{new_exe_path}"
+del "%~f0"
+"""
         with open(bat_path, "w", encoding="utf-8") as bat_file:
             bat_file.write(bat_content)
 
-        # Starta skriptet i bakgrunden utan att låsa Python
+        # Vi behöver inte ens skicka med clean_env längre, explorer.exe löser allt!
         subprocess.Popen([bat_path], shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
         
-        # Stäng ner programmet så att filen låses upp och kan raderas
-        os._exit(0)
+        return True
         
     except Exception as e:
         print(f"Kunde inte genomföra uppdateringen: {e}")

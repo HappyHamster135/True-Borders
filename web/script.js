@@ -1434,12 +1434,12 @@ async function manualUpdateCheck() {
             if (confirm(`En ny version (v${result.version}) hittades!\n\nVill du ladda ner och installera den nu? Programmet kommer att startas om.`)) {
                 btn.innerText = "Laddar ner...";
                 let success = await eel.perform_update(result.url)();
-                if (success === false) {
-                    alert("Ett fel uppstod vid uppdateringen. Vänligen kolla konsolen eller kör som administratör.");
-                    btn.innerText = originalText;
-                    btn.disabled = false;
+                if (success === true) {
+                    // Stäng ner fönstret! Detta låter Python stänga mjukt.
+                    window.close();
                 }
             } else {
+                alert("Ett fel uppstod vid uppdateringen...");
                 btn.innerText = originalText;
                 btn.disabled = false;
             }
