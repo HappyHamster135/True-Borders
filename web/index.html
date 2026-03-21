@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="sv">
+
+<head>
+    <meta charset="UTF-8">
+    <title>True Borders</title>
+
+    <link
+        href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;700&family=Lora:ital,wght@0,400;0,700;1,400&family=Montserrat:wght@400;600;700&family=Orbitron:wght@500;700;900&family=Playfair+Display:wght@600;800&family=Poppins:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+
+    <script>
+        const savedTheme = localStorage.getItem('savedTheme') || 'cyberpunk';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+    </script>
+    <script type="text/javascript" src="/eel.js"></script>
+</head>
+
+<body>
+    <div id="splash-screen">
+        <div class="splash-content">
+            <div class="cyber-logo-wrapper">
+                <div class="cyber-logo-frame"></div>
+                <div class="cyber-logo-icon">T</div>
+            </div>
+            <div class="loading-bar-wrapper">
+                <div class="loading-bar"></div>
+            </div>
+            <div class="loading-text">Loading Profiles...</div>
+        </div>
+    </div>
+
+    <nav class="tabs">
+        <button id="tab-btn-map" class="tab-btn active" onclick="showTab('map')">Visual Map</button>
+        <button id="tab-btn-profiles" class="tab-btn" onclick="showTab('profiles')">Profiles</button>
+        <button id="tab-btn-settings" class="tab-btn" onclick="showTab('settings')">Settings</button>
+
+        <button class="nav-icon-btn" onclick="window.open('https://ko-fi.com/jonathanwenell', '_blank')"
+            title="Buy me a coffee!">☕</button>
+        <button class="nav-icon-btn" onclick="openBugModal()" title="Report a bug">🪲</button>
+    </nav>
+
+    <div id="bug-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="closeBugModal()">&times;</span>
+            <h3 style="color: var(--accent-2); margin-top: 0;">🪲 Report a Bug</h3>
+            <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 20px;">Describe the issue and I'll
+                look into it!</p>
+
+            <form id="bug-form" class="modal-settings-group">
+                <div class="control-group">
+                    <label style="display: block; margin-bottom: 5px;">Your Email:</label>
+                    <input type="email" name="email" required placeholder="so I can reply to you..."
+                        style="width: 100%; background: var(--bg-darker); color: var(--text-main); border: 1px solid var(--bg-panel); padding: 10px; border-radius: 6px; font-family: var(--font-body);">
+                </div>
+
+                <div class="control-group">
+                    <label style="display: block; margin-bottom: 5px;">Message:</label>
+                    <textarea name="message" required placeholder="What happened? Which game? Any errors?"
+                        style="width: 100%; background: var(--bg-darker); color: var(--text-main); border: 1px solid var(--bg-panel); padding: 10px; border-radius: 6px; font-family: var(--font-body); resize: none;"></textarea>
+                </div>
+
+                <button type="submit" id="bug-submit-btn" class="cyber-btn pink-btn" style="width: 100%;">
+                    Send Bug Report
+                </button>
+            </form>
+            <div id="bug-status" style="margin-top: 15px; text-align: center; font-size: 0.9rem; display: none;"></div>
+        </div>
+    </div>
+
+    <section id="map-tab" class="tab-content">
+        <div class="container map-tab-wrapper">
+
+            <div class="map-top-controls">
+                <div class="control-panel left-panel">
+                    <h3 class="panel-title" style="text-align: center;">1. Configure Window</h3>
+
+                    <div class="control-group" style="margin-bottom: 20px;">
+                        <label style="text-align: center; display: block; margin-bottom: 5px;">Target Game:</label>
+
+                        <div class="custom-select-wrapper" id="custom-select-wrapper"
+                            style="width: 280px; margin: 0 auto;">
+                            <div class="custom-select-trigger" id="custom-select-trigger">
+                                <div class="trigger-content" id="custom-select-text">Select a game...</div>
+                                <div style="color: var(--accent-1);">▼</div>
+                            </div>
+                            <div class="custom-options" id="custom-options">
+                                <input type="text" id="game-search" placeholder="Search game..."
+                                    style="box-sizing: border-box; width: 100%; padding: 12px; margin: 0; border: none; border-bottom: 1px solid var(--bg-panel); background: var(--bg-darker); color: var(--text-main); outline: none; position: sticky; top: 0; z-index: 10; border-radius: 6px 6px 0 0;">
+                                <div id="game-options-list"></div>
+                            </div>
+                        </div>
+                        <input type="hidden" id="window_title_input">
+                    </div>
+
+                    <div class="control-group" style="margin-bottom: 20px;">
+                        <label style="text-align: center; display: block; margin-bottom: 5px;">Size Preset:</label>
+
+                        <div class="custom-select-wrapper" id="preset-select-wrapper"
+                            style="width: 280px; margin: 0 auto;">
+                            <div class="custom-select-trigger" id="preset-select-trigger">
+                                <div class="trigger-content" id="preset-select-text">Custom Size...</div>
+                                <div style="color: var(--accent-1);">▼</div>
+                            </div>
+                            <div class="custom-options" id="preset-options">
+                                <div class="custom-option" data-value="custom"><span>Custom Size...</span></div>
+                                <div class="custom-option" data-value="1920x1080"><span>1920 x 1080 (FHD)</span></div>
+                                <div class="custom-option" data-value="2560x1080"><span>2560 x 1080 (Ultrawide)</span>
+                                </div>
+                                <div class="custom-option" data-value="2560x1440"><span>2560 x 1440 (QHD)</span></div>
+                                <div class="custom-option" data-value="3440x1440"><span>3440 x 1440 (UWQHD)</span></div>
+                                <div class="custom-option" data-value="3840x2160"><span>3840 x 2160 (4K UHD)</span>
+                                </div>
+                            </div>
+                        </div>
+                        <input type="hidden" id="resPreset" value="custom">
+                    </div>
+
+                    <div class="control-group" id="custom-res-group"
+                        style="margin-bottom: 20px; display: flex; flex-direction: column; align-items: center;">
+
+                        <label style="text-align: center; display: block; margin-bottom: 5px;">Custom Dimensions
+                            (scroll):</label>
+
+                        <div class="res-input-row-polished"
+                            style="width: 280px; display: flex; justify-content: center; gap: 5px; align-items: center; box-sizing: border-box; padding: 0 10px;">
+
+                            <input type="number" id="resW" class="res-num-polished" placeholder="W"
+                                style="flex: 1; height: 45px; text-align: center; background: transparent; border: none; color: var(--text-main); font-weight: bold; outline: none; font-family: var(--font-body); font-size: 16px; cursor: ns-resize;">
+
+                            <span
+                                style="color: var(--text-muted); font-family: var(--font-body); user-select: none; pointer-events: none;">x</span>
+
+                            <input type="number" id="resH" class="res-num-polished" placeholder="H"
+                                style="flex: 1; height: 45px; text-align: center; background: transparent; border: none; color: var(--text-main); font-weight: bold; outline: none; font-family: var(--font-body); font-size: 16px; cursor: ns-resize;">
+
+                            <span
+                                style="color: var(--text-muted); font-family: var(--font-body); user-select: none; pointer-events: none;">px</span>
+
+                        </div>
+                    </div>
+                </div>
+
+                <div class="control-panel right-panel">
+                    <h3 class="panel-title">2. Fine-tune Position</h3>
+                    <p class="instruction-compact">Nudge using the center input (scroll)</p>
+
+                    <div class="d-pad-container">
+                        <div class="d-pad-grid-reworked">
+                            <div></div>
+                            <button class="d-pad-btn-polished" onclick="nudgeBox(0, -1)">▲</button>
+                            <div></div>
+
+                            <button class="d-pad-btn-polished" onclick="nudgeBox(-1, 0)">◀</button>
+
+                            <input type="number" id="nudge-amount" value="1" min="1" max="100"
+                                class="d-pad-display-polished">
+
+                            <button class="d-pad-btn-polished" onclick="nudgeBox(1, 0)">▶</button>
+
+                            <div></div>
+                            <button class="d-pad-btn-polished" onclick="nudgeBox(0, 1)">▼</button>
+                            <div></div>
+                        </div>
+                    </div>
+                    <div class="quick-snaps"
+                        style="margin-top: 25px; border-top: 1px dashed rgba(128, 128, 128, 0.25); padding-top: 15px;">
+                        <label
+                            style="text-align: center; display: block; margin-bottom: 12px; font-size: 0.85rem; color: var(--text-muted); font-weight: bold; font-family: var(--font-body);">Quick
+                            Snaps:</label>
+
+                        <div style="display: flex; justify-content: center; gap: 10px;">
+                            <button class="d-pad-btn-polished has-tooltip" data-tooltip="Align Left"
+                                onclick="snapWindow('left')">⇤</button>
+                            <button class="d-pad-btn-polished has-tooltip" data-tooltip="Center-Left"
+                                onclick="snapWindow('center-left')">⇠</button>
+                            <button class="d-pad-btn-polished has-tooltip" data-tooltip="Center Screen"
+                                onclick="snapWindow('center')">⌖</button>
+                            <button class="d-pad-btn-polished has-tooltip" data-tooltip="Center-Right"
+                                onclick="snapWindow('center-right')">⇢</button>
+                            <button class="d-pad-btn-polished has-tooltip" data-tooltip="Align Right"
+                                onclick="snapWindow('right')">⇥</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="map-area-wrapper-polished">
+                <div id="monitor-map"></div>
+
+                <div class="button-row-centered">
+                    <button id="btnApply" class="cyber-btn teal-btn">APPLY BORDERLESS</button>
+                    <button id="btnRestore" class="cyber-btn pink-btn">RESTORE BORDERS</button>
+                </div>
+                <div id="status-polished">Ready.</div>
+            </div>
+        </div>
+    </section>
+
+    <section id="profiles-tab" class="tab-content" style="display:none;">
+        <div class="container" style="background: transparent; border: none; box-shadow: none;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">
+                <h2 class="neon-title" style="margin: 0;">Saved Profiles</h2>
+
+                <span id="profile-status"
+                    style="color: #ffaa00; font-family: var(--font-body); font-weight: bold; font-size: 14px; opacity: 0; transition: opacity 0.3s; flex-grow: 1; text-align: center; margin: 0 15px;"></span>
+
+                <input type="text" id="profile-search" placeholder="Search saved profiles..." class="cyber-search-input"
+                    style="width: 250px; margin: 0;">
+            </div>
+
+            <div class="profile-list" id="profile-list"></div>
+        </div>
+    </section>
+    <section id="settings-tab" class="tab-content" style="display:none;">
+        <div class="container" style="background: transparent; border: none; box-shadow: none;">
+
+            <div class="settings-accordion">
+                <div class="accordion-header" onclick="toggleAccordion('prefs-content', this)">
+                    <h2 class="neon-title" style="margin: 0; font-size: 1.4rem; text-align: left;">System Preferences
+                    </h2>
+                    <span class="accordion-arrow" style="transform: rotate(0deg);">▼</span>
+                </div>
+
+                <div id="prefs-content" class="accordion-content open">
+
+                    <div class="accordion-inner-wrapper">
+                        <div
+                            style="max-width: 400px; margin: 0 auto; display: flex; flex-direction: column; gap: 15px;">
+
+                            <div class="setting-row"
+                                style="padding: 15px; border: 1px solid var(--bg-panel); border-radius: 8px; display: flex; justify-content: space-between; align-items: center; margin: 0;">
+                                <span
+                                    style="font-weight: bold; color: var(--accent-1); font-family: var(--font-body);">Run
+                                    on Startup</span>
+                                <label class="neon-switch">
+                                    <input type="checkbox" id="setting-autostart" onchange="handleAutostartToggle()">
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+
+                            <div class="setting-row"
+                                style="padding: 15px; border: 1px solid var(--bg-panel); border-radius: 8px; display: flex; justify-content: space-between; align-items: center; margin: 0;">
+                                <span class="has-tooltip" data-tooltip="Save or load your settings"
+                                    style="font-weight: bold; color: var(--accent-1); font-family: var(--font-body); cursor: help;">Backup
+                                    Profiles</span>
+                                <div style="display: flex; gap: 10px;">
+                                    <button class="neon-btn-small" onclick="exportProfiles()"
+                                        title="Save profiles to a file"
+                                        style="padding: 5px 12px; font-size: 14px;">Export</button>
+                                    <button class="neon-btn-small"
+                                        onclick="document.getElementById('import-file').click()"
+                                        title="Load profiles from a file"
+                                        style="padding: 5px 12px; font-size: 14px;">Import</button>
+                                    <input type="file" id="import-file" style="display: none;" accept=".json"
+                                        onchange="importProfiles(event)">
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="settings-accordion">
+                <div class="accordion-header" onclick="toggleAccordion('theme-content', this)">
+                    <h2 class="neon-title" style="margin: 0; font-size: 1.4rem; text-align: left;">App Appearance</h2>
+                    <span class="accordion-arrow" style="transform: rotate(-90deg);">▼</span>
+                </div>
+
+                <div id="theme-content" class="accordion-content">
+
+                    <div class="accordion-inner-wrapper">
+                        <p style="text-align: center; color: var(--text-muted); margin-top: 0; margin-bottom: 20px;">
+                            Select
+                            a theme to customize your experience.</p>
+
+                        <div class="theme-grid">
+                            <button class="theme-btn" data-theme="obsidian">Obsidian Glow</button>
+                            <button class="theme-btn" data-theme="nordic-light">Nordic Light</button>
+                            <button class="theme-btn" data-theme="default">Cyberpunk (Default)</button>
+                            <button class="theme-btn" data-theme="midnight-slate">Midnight Slate</button>
+                            <button class="theme-btn" data-theme="synthwave">Neon Synthwave</button>
+                            <button class="theme-btn" data-theme="winter-night">Winter Night</button>
+                            <button class="theme-btn" data-theme="ocean">Ocean Breeze</button>
+                            <button class="theme-btn" data-theme="forest">Dark Forest</button>
+                            <button class="theme-btn" data-theme="maroon-space">Maroon Space</button>
+                            <button class="theme-btn" data-theme="golden">Golden Hour</button>
+
+                            <button class="theme-btn" data-theme="arctic">Arctic Crisp</button>
+                            <button class="theme-btn" data-theme="lavender">Lavender Haze</button>
+                            <button class="theme-btn" data-theme="spring-pastel">Spring Pastel</button>
+                            <button class="theme-btn" data-theme="pastel-cream">Pastel Cream</button>
+                            <button class="theme-btn" data-theme="sage">Sage Garden</button>
+                            <button class="theme-btn" data-theme="vintage-nature">Vintage Nature</button>
+                            <button class="theme-btn" data-theme="coffee">Vintage Coffee</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+
+        <div style="display: flex; gap: 20px; width: 100%; max-width: 840px; margin: 40px auto 0 auto;">
+
+            <button class="cyber-btn teal-btn" onclick="hideToTray()" style="flex: 1; margin: 0;">
+                Hide to Tray
+            </button>
+
+            <button class="cyber-btn pink-btn" onclick="exitApp()" style="flex: 1; margin: 0;">
+                Exit App
+            </button>
+
+        </div>
+    </section>
+
+    </div>
+    <div id="save-prompt-modal" class="modal">
+        <div class="modal-content">
+            <h3 style="color: var(--accent-1); margin-top: 0;">Save Profile?</h3>
+            <p>Do you want to save <strong id="prompt-game-name" style="color: var(--accent-2);"></strong> to your
+                Profiles so it auto-loads next time?</p>
+            <div class="modal-button-container">
+                <button class="cyber-btn teal-btn" id="btn-prompt-yes" onclick="handleSavePrompt(true)">Yes,
+                    Save</button>
+                <button class="cyber-btn pink-btn" id="btn-prompt-no" onclick="handleSavePrompt(false)">No, Just
+                    Apply</button>
+            </div>
+        </div>
+    </div>
+    <div id="settings-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="closeModal()">&times;</span>
+            <h3 id="modal-title" style="color: var(--accent-1); margin-top: 0;">Profile Settings</h3>
+            <p>Options for <strong id="modal-game-name" style="color: var(--accent-2);"></strong>:</p>
+
+            <div class="modal-settings-group">
+                <div class="setting-row">
+                    <span class="has-tooltip"
+                        data-tooltip="Automatically hides the Windows taskbar when the game is running.">Hide
+                        Taskbar</span>
+                    <label class="neon-switch">
+                        <input type="checkbox" id="modal-hide-taskbar" onchange="toggleTaskbarDependency()">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+
+                <div class="setting-row sub-setting disabled-setting" id="disable-row" style="padding-left: 25px;">
+                    <span class="has-tooltip"
+                        data-tooltip="Completely disables the taskbar so you don't accidentally click it during a match."
+                        style="font-size: 0.85em;">
+                        <span class="dim-text">Disable interaction (Total hide)</span>
+                    </span>
+                    <label class="neon-switch">
+                        <input type="checkbox" id="modal-disable-taskbar" onchange="updateTaskbarSettings()">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+
+                <div class="setting-row"
+                    style="margin-top: 15px; padding-top: 15px; border-top: 1px dashed var(--text-muted);">
+                    <span class="has-tooltip"
+                        data-tooltip="Forces the game to always stay on top, preventing other windows from interrupting you."
+                        style="font-weight: bold; color: var(--accent-1);">Force Game Always on Top</span>
+                    <label class="neon-switch">
+                        <input type="checkbox" id="modal-always-ontop" onchange="updateTaskbarSettings()">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+
+                <div class="setting-row">
+                    <span class="has-tooltip"
+                        data-tooltip="Uses a deeper Windows method to remove window borders. Enable this if the standard method fails."
+                        style="font-weight: bold; color: var(--accent-1);">Advanced Border Fix</span>
+                    <label class="neon-switch">
+                        <input type="checkbox" id="modal-border-fix" onchange="updateTaskbarSettings()">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="setting-row"
+                    style="margin-top: 20px; padding: 15px; border: 1px solid var(--bg-panel); border-radius: 8px;">
+                    <span style="font-weight: bold; color: var(--accent-1); display: block; margin-bottom: 8px;">Game
+                        Executable (Auto-Launch)</span>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="text" id="modal-exe-path" placeholder="Start the game once, or browse..."
+                            style="flex: 1; background: var(--bg-darker); color: var(--text-main); border: 1px solid var(--accent-1); border-radius: 4px; padding: 8px; font-family: var(--font-body); font-size: 12px;"
+                            onchange="manuallyUpdateExePath()">
+                        <button class="neon-btn-small" onclick="browseForExe()"
+                            style="padding: 0 12px; font-size: 12px;">Browse</button>
+                    </div>
+                    <small id="exe-save-status"
+                        style="color: var(--text-muted); display: block; margin-top: 5px; font-size: 11px;"></small>
+                </div>
+                <div class="setting-row"
+                    style="margin-top: 20px; padding: 15px; border: 1px solid var(--accent-1); border-radius: 8px;">
+                    <div>
+                        <span class="has-tooltip"
+                            data-tooltip="Allows you to toggle borderless mode on the active window by pressing the hotkey, even when the app is in the background."
+                            style="display: block; font-weight: bold; color: var(--accent-1);"> Global Hotkey</span>
+
+                        <input type="text" id="hotkey-input" value="ctrl+shift+b" readonly
+                            onkeydown="recordHotkey(event)"
+                            style="margin-top: 5px; background: var(--bg-darker); color: var(--text-main); border: 1px solid var(--accent-2); border-radius: 4px; padding: 5px; font-family: var(--font-body); width: 150px; cursor: pointer; text-align: center; text-transform: uppercase; font-weight: bold;"
+                            title="Click here and press your new keys">
+                    </div>
+                    <label class="neon-switch">
+                        <input type="checkbox" id="global-hotkey-toggle" onchange="toggleGlobalHotkey()">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+
+                <div class="setting-row"
+                    style="margin-top: 20px; padding: 15px; border: 1px solid var(--accent-1); border-radius: 8px;">
+                    <div>
+                        <span class="has-tooltip"
+                            data-tooltip="Makes Windows prioritize windowed games the same way as Fullscreen games. Reduces input lag and enables Auto-HDR!"
+                            style="display: block; font-weight: bold; color: var(--accent-1);">
+                            System Latency Boost <small id="admin-note"></small>
+                        </span>
+                        <small style="color: var(--text-muted);">Enables Windows 11 Windowed Optimizations
+                            globally.</small>
+                    </div>
+                    <button id="latency-boost-btn" class="neon-btn-small" onclick="runSystemOptimize()"
+                        style="width: auto; padding: 10px 20px;">
+                        Apply Boost
+                    </button>
+                </div>
+            </div>
+            <div class="modal-button-container">
+                <button class="cyber-btn teal-btn" onclick="editProfileOnMap()">Edit on Map</button>
+                <button class="cyber-btn pink-btn" onclick="deleteCurrentProfile()">Delete Profile</button>
+            </div>
+        </div>
+
+
+
+    </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>

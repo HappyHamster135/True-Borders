@@ -1,0 +1,2379 @@
+/* --- TEMA-VARIABLER --- */
+
+/* Cyberpunk (Default) - Oförändrad, redan bra! */
+:root {
+    --bg-main: #1E222B;
+    --bg-panel: #2A2F3A;
+    --bg-darker: #15181E;
+    --text-main: #F0F0F0;
+    --text-muted: #A0AAB2;
+    --accent-1: #00e5ff;
+    --accent-2: #ff3366;
+    --font-heading: 'Orbitron', sans-serif;
+    --font-body: 'Montserrat', sans-serif;
+}
+
+/* Ocean - Uppdaterad: Djupare marinblå med klarare cyan-accenter */
+[data-theme="ocean"] {
+    --bg-main: #0F172A;
+    --bg-panel: #1E293B;
+    --bg-darker: #0B1120;
+    --text-main: #F8FAFC;
+    --text-muted: #94A3B8;
+    --accent-1: #22D3EE;
+    --accent-2: #3B82F6;
+    --font-heading: 'Space Grotesk', sans-serif;
+    --font-body: 'Poppins', sans-serif;
+}
+
+/* Coffee - Uppdaterad: Varmare latte-känsla, mjukare kontrast */
+[data-theme="coffee"] {
+    --bg-main: #FAF4F0;
+    --bg-panel: #EBE3D5;
+    --bg-darker: #DBCFBE;
+    --text-main: #3E2723;
+    --text-muted: #795548;
+    --accent-1: #D97757;
+    --accent-2: #A15C38;
+    --font-heading: 'Playfair Display', serif;
+    --font-body: 'Lora', serif;
+}
+
+/* Forest - Uppdaterad: Djup mörkgrön "Pine"-känsla med smaragd-accenter */
+[data-theme="forest"] {
+    --bg-main: #0F1C15;
+    --bg-panel: #162C21;
+    --bg-darker: #0A120E;
+    --text-main: #D1E8E2;
+    --text-muted: #82A89A;
+    --accent-1: #10B981;
+    --accent-2: #059669;
+    --font-heading: 'Space Grotesk', sans-serif;
+    --font-body: 'Montserrat', sans-serif;
+}
+
+/* Golden Hour - Uppdaterad: Lyxigare, mörk charcoal/brun bas */
+[data-theme="golden"] {
+    --bg-main: #1C1917;
+    --bg-panel: #292524;
+    --bg-darker: #0C0A09;
+    --text-main: #FEF3C7;
+    --text-muted: #A8A29E;
+    --accent-1: #F59E0B;
+    --accent-2: #D97706;
+    --font-heading: 'Montserrat', sans-serif;
+    --font-body: 'Poppins', sans-serif;
+}
+
+/* Maroon Space - Uppdaterad: Riktigt djup vinröd/svart "Dracula"-stil */
+[data-theme="maroon-space"] {
+    --bg-main: #240F18;
+    --bg-panel: #381625;
+    --bg-darker: #1A0910;
+    --text-main: #FFE4E6;
+    --text-muted: #FDA4AF;
+    --accent-1: #F43F5E;
+    --accent-2: #BE123C;
+    --font-heading: 'Orbitron', sans-serif;
+    --font-body: 'Montserrat', sans-serif;
+}
+
+/* Vintage Nature - Uppdaterad: Mer harmonisk grå/oliv-tonad papperskänsla */
+[data-theme="vintage-nature"] {
+    --bg-main: #F4F1E1;
+    --bg-panel: #E6E1C5;
+    --bg-darker: #D4CDA8;
+    --text-main: #4A4A3A;
+    --text-muted: #7A7A68;
+    --accent-1: #6B705C;
+    --accent-2: #A5A58D;
+    --font-heading: 'Lora', serif;
+    --font-body: 'Poppins', sans-serif;
+}
+
+/* Sage Garden (Oörörd) */
+[data-theme="sage"] {
+    --bg-main: #F8F3E1;
+    --bg-panel: #EAE3C9;
+    --bg-darker: #D8C9A7;
+    --text-main: #3D4018;
+    --text-muted: #7A8256;
+    --accent-1: #8FA361;
+    --accent-2: #6A7A45;
+    --font-heading: 'Lora', serif;
+    --font-body: 'Montserrat', sans-serif;
+}
+
+/* Pastel Cream (Oörörd) */
+[data-theme="pastel-cream"] {
+    --bg-main: #FFF2EB;
+    --bg-panel: #FFE4D6;
+    --bg-darker: #FFD1B8;
+    --text-main: #5C3A21;
+    --text-muted: #99735D;
+    --accent-1: #E86A76;
+    --accent-2: #C4555E;
+    --font-heading: 'Poppins', sans-serif;
+    --font-body: 'Montserrat', sans-serif;
+}
+
+/* ================= NYA TEMAN ================= */
+
+/* NY: Midnight Slate (Mörk) - Ren, professionell gråblå */
+[data-theme="midnight-slate"] {
+    --bg-main: #121212;
+    --bg-panel: #1E1E1E;
+    --bg-darker: #0A0A0A;
+    --text-main: #E0E0E0;
+    --text-muted: #888888;
+    --accent-1: #7289DA;
+    /* Snygg Blurple */
+    --accent-2: #5865F2;
+    --font-heading: 'Montserrat', sans-serif;
+    --font-body: 'Poppins', sans-serif;
+}
+
+/* NY: Neon Synthwave (Mörk) - 80-tals Outrun-stil */
+[data-theme="synthwave"] {
+    --bg-main: #1A0B2E;
+    --bg-panel: #2D1B4E;
+    --bg-darker: #0F0518;
+    --text-main: #F8E7FF;
+    --text-muted: #A388C4;
+    --accent-1: #00F0FF;
+    /* Neon Cyan */
+    --accent-2: #FF007F;
+    /* Hot Pink */
+    --font-heading: 'Space Grotesk', sans-serif;
+    --font-body: 'Orbitron', sans-serif;
+}
+
+/* NY: Lavender Haze (Ljus) - Elegant, mjuk lila */
+[data-theme="lavender"] {
+    --bg-main: #F4F0FF;
+    --bg-panel: #E6DCF5;
+    --bg-darker: #D6C8EB;
+    --text-main: #2A1B3D;
+    --text-muted: #6B5B95;
+    --accent-1: #9D4EDD;
+    --accent-2: #7B2CBF;
+    --font-heading: 'Playfair Display', serif;
+    --font-body: 'Montserrat', sans-serif;
+}
+
+/* NY: Arctic Crisp (Ljus) - Iskall, ren och minimalistisk */
+[data-theme="arctic"] {
+    --bg-main: #F0F4F8;
+    --bg-panel: #FFFFFF;
+    --bg-darker: #D9E2EC;
+    --text-main: #102A43;
+    --text-muted: #486581;
+    --accent-1: #0EA5E9;
+    /* Klarblå */
+    --accent-2: #0284C7;
+    --font-heading: 'Poppins', sans-serif;
+    --font-body: 'Poppins', sans-serif;
+}
+
+/* NY: Spring Pastel (Ljus) - Varm, lekfull och färgglad */
+[data-theme="spring-pastel"] {
+    --bg-main: #F9F6C4;
+    /* Din ljusgula */
+    --bg-panel: #FFFFF0;
+    /* Lite ljusare/vitare för panelerna så de syns mot bakgrunden */
+    --bg-darker: #EBE8B5;
+    --text-main: #2B6D9E;
+    /* En mörkare version av din blå så texten är lättläst */
+    --text-muted: #44ACFF;
+    /* Din mellanblå */
+    --accent-1: #FE9EC7;
+    /* Din rosa färg (perfekt för knappar och ramar!) */
+    --accent-2: #89D4FF;
+    /* Din ljusblå (perfekt för hover och D-pad) */
+    --font-heading: 'Space Grotesk', sans-serif;
+    --font-body: 'Poppins', sans-serif;
+}
+
+/* NY: Winter Night (Mörk) - Djup, kall och rymd-aktig */
+[data-theme="winter-night"] {
+    --bg-main: #18122B;
+    /* Din svart-lila */
+    --bg-panel: #393053;
+    /* Din mörklila */
+    --bg-darker: #0E0A1A;
+    --text-main: #EAE6F3;
+    /* Mjukt lila-vit för bästa läsbarhet */
+    --text-muted: #8F84B5;
+    --accent-1: #635985;
+    /* Din ljusaste lila från paletten som huvudaccent */
+    --accent-2: #443C68;
+    /* Din mellan-lila */
+    --font-heading: 'Orbitron', sans-serif;
+    --font-body: 'Montserrat', sans-serif;
+}
+
+/* --- GÖR APPEN OMARKERBAR (Native-känsla) --- */
+body,
+* {
+    /* Stänger av textmarkering överallt */
+    -webkit-user-select: none;
+    /* Safari & Chrome (Eel) */
+    -moz-user-select: none;
+    /* Firefox */
+    -ms-user-select: none;
+    /* IE & Edge */
+    user-select: none;
+    /* Standard */
+
+    /* Extra bonus: Stänger av att man kan "dra" bilder och länkar */
+    -webkit-user-drag: none;
+}
+
+/* --- UNDANTAG: Fält där man MÅSTE kunna skriva och markera --- */
+/* Om användaren ska kunna skriva in "2000" i en input, måste de kunna markera siffrorna */
+input,
+textarea {
+    -webkit-user-select: auto;
+    -moz-user-select: auto;
+    -ms-user-select: auto;
+    user-select: auto;
+}
+
+
+/* --- GÖM SCROLLBAREN GLOBALT --- */
+/* För Chrome, Edge och Safari (Eel använder denna) */
+::-webkit-scrollbar {
+    display: none;
+}
+
+/* --- THEME BUTTONS --- */
+.theme-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    margin-top: 30px;
+}
+
+.theme-btn {
+    padding: 15px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: bold;
+    font-family: var(--font-heading);
+    transition: all 0.2s ease;
+    border: 2px solid transparent;
+}
+
+/* Skapar en snygg ram kring det tema som är valt just nu */
+.theme-btn.active {
+    border-color: var(--text-main);
+    transform: none;
+    /* Fixen! Vi stänger av "växandet" så kanterna inte klipps */
+    box-shadow: 0 0 15px rgba(255, 255, 255, 0.15), inset 0 0 10px rgba(255, 255, 255, 0.1);
+    /* Ett yttre OCH inre sken */
+}
+
+.theme-btn:hover {
+    transform: none;
+    /* Fixen! Stänger av växandet här också */
+    filter: brightness(1.2);
+}
+
+/* Färgerna för varje specifik knapp (Förhandsvisning) */
+.theme-btn[data-theme="default"] {
+    background-color: #2A2F3A;
+    color: #00e5ff;
+    border: 2px solid #00e5ff;
+}
+
+.theme-btn[data-theme="ocean"] {
+    background-color: #1E293B;
+    color: #22D3EE;
+    border: 2px solid #22D3EE;
+}
+
+.theme-btn[data-theme="coffee"] {
+    background-color: #EBE3D5;
+    color: #D97757;
+    border: 2px solid #D97757;
+}
+
+.theme-btn[data-theme="forest"] {
+    background-color: #162C21;
+    color: #10B981;
+    border: 2px solid #10B981;
+}
+
+.theme-btn[data-theme="golden"] {
+    background-color: #292524;
+    color: #F59E0B;
+    border: 2px solid #F59E0B;
+}
+
+.theme-btn[data-theme="maroon-space"] {
+    background-color: #381625;
+    color: #F43F5E;
+    border: 2px solid #F43F5E;
+}
+
+.theme-btn[data-theme="vintage-nature"] {
+    background-color: #E6E1C5;
+    color: #6B705C;
+    border: 2px solid #6B705C;
+}
+
+.theme-btn[data-theme="sage"] {
+    background-color: #F8F3E1;
+    color: #8FA361;
+    border: 2px solid #8FA361;
+}
+
+.theme-btn[data-theme="pastel-cream"] {
+    background-color: #FFE4D6;
+    color: #E86A76;
+    border: 2px solid #E86A76;
+}
+
+/* NYA TEMAN */
+.theme-btn[data-theme="midnight-slate"] {
+    background-color: #1E1E1E;
+    color: #7289DA;
+    border: 2px solid #7289DA;
+}
+
+.theme-btn[data-theme="synthwave"] {
+    background-color: #2D1B4E;
+    color: #00F0FF;
+    border: 2px solid #00F0FF;
+    text-shadow: 0 0 5px #00F0FF;
+}
+
+.theme-btn[data-theme="lavender"] {
+    background-color: #E6DCF5;
+    color: #9D4EDD;
+    border: 2px solid #9D4EDD;
+}
+
+.theme-btn[data-theme="arctic"] {
+    background-color: #FFFFFF;
+    color: #0EA5E9;
+    border: 2px solid #0EA5E9;
+}
+
+.theme-btn[data-theme="spring-pastel"] {
+    background-color: #FFFFF0;
+    color: #FE9EC7;
+    border: 2px solid #FE9EC7;
+}
+
+.theme-btn[data-theme="winter-night"] {
+    background-color: #393053;
+    color: #B3A8D6;
+    border: 2px solid #635985;
+}
+
+.theme-btn[data-theme="obsidian"] {
+    background-color: #151A23;
+    color: #00E6F6;
+    border: 2px solid #00E6F6;
+    box-shadow: var(--theme-glow);
+}
+
+.theme-btn[data-theme="nordic-light"] {
+    background-color: #FFFFFF;
+    color: #3B82F6;
+    border: 2px solid #3B82F6;
+    box-shadow: var(--theme-shadow);
+}
+
+/* 🌟 PREMIUM MÖRK: Obsidian Glow */
+[data-theme="obsidian"] {
+    --bg-main: #0B0E14;
+    --bg-panel: #151A23;
+    --bg-darker: #05070A;
+    --text-main: #E2E8F0;
+    --text-muted: #64748B;
+    --accent-1: #00E6F6;
+    /* Elektrisk Cyan */
+    --accent-2: #8A2BE2;
+    /* Djup Violett */
+    --font-heading: 'Space Grotesk', sans-serif;
+    --font-body: 'Poppins', sans-serif;
+    /* Nya Premium-variabler för extra djup */
+    --theme-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+    --theme-glow: 0 0 20px rgba(0, 230, 246, 0.3);
+}
+
+/* 🌟 PREMIUM LJUS: Nordic Light */
+[data-theme="nordic-light"] {
+    --bg-main: #F4F5F7;
+    --bg-panel: #FFFFFF;
+    --bg-darker: #E2E4E9;
+    --text-main: #1E293B;
+    --text-muted: #64748B;
+    --accent-1: #3B82F6;
+    /* Klarblå */
+    --accent-2: #F43F5E;
+    /* Korall/Rosa */
+    --font-heading: 'Montserrat', sans-serif;
+    --font-body: 'Poppins', sans-serif;
+    /* Nya Premium-variabler för extra djup */
+    --theme-shadow: 0 10px 40px rgba(148, 163, 184, 0.2);
+    --theme-glow: 0 0 20px rgba(59, 130, 246, 0.2);
+}
+
+/* --- GRUNDSTYLING --- */
+body {
+    background-color: var(--bg-main);
+    color: var(--text-main);
+    font-family: var(--font-body);
+    font-size: 16px;
+    /* NYTT: Tvingar en bra grundstorlek för alla fonter */
+    margin: 0;
+    padding: 20px;
+    display: block;
+    /* NYTT: Hindrar flexbox från att krympa innehållet */
+    transition: background-color 0.3s, color 0.3s;
+    -ms-overflow-style: none;
+    /* IE och gamla Edge */
+    scrollbar-width: none;
+    /* Firefox */
+    min-width: 860px;
+    min-height: 650px;
+    overflow: auto;
+}
+
+.container {
+    width: 100%;
+    max-width: 840px;
+    /* Ändrad från 550px för att matcha dina tabs! */
+    margin: 0 auto;
+    /* NYTT: Centrerar hela appen perfekt på skärmen */
+    text-align: center;
+    box-shadow: var(--theme-shadow, 0 10px 30px rgba(0, 0, 0, 0.3));
+}
+
+input[type="text"] {
+    width: 80%;
+    padding: 10px;
+    background-color: var(--bg-main);
+    color: var(--accent-2);
+    border: 2px solid var(--accent-1);
+    border-radius: 5px;
+    font-size: 16px;
+    font-weight: bold;
+    text-align: center;
+    outline: none;
+    transition: box-shadow 0.3s;
+}
+
+input[type="text"]:focus {
+    box-shadow: 0 0 10px var(--accent-1);
+}
+
+.res-inputs {
+    margin-top: 15px;
+    color: var(--accent-1);
+    font-weight: bold;
+    font-size: 14px;
+}
+
+.res-inputs input {
+    width: 70px;
+    padding: 5px;
+    background: var(--bg-main);
+    color: var(--accent-2);
+    border: 1px solid var(--accent-1);
+    text-align: center;
+    border-radius: 3px;
+    font-weight: bold;
+}
+
+.instruction {
+    font-size: 14px;
+    margin-top: 20px;
+    color: var(--accent-1);
+}
+
+/* ==========================================================================
+    KARTA OCH BOXAR (Modern Blueprint / HUD Design)
+   ========================================================================== */
+
+#monitor-map {
+    position: relative;
+    width: 100%;
+    height: 250px;
+    background-color: var(--bg-darker);
+    /* --- ÄNDRING: Vi tar bort blueprint-mönstret för en renare yta --- */
+    border: 2px solid var(--bg-panel);
+    border-radius: 20px;
+    /* --- ÄNDRING: Mycket rundare kanter --- */
+    margin-bottom: 25px;
+    overflow: hidden;
+    box-shadow: inset 0 0 15px rgba(0, 0, 0, 0.3);
+    /* Mjuk inre skugga */
+}
+
+.monitor {
+    position: absolute;
+    background-color: var(--bg-main);
+    border: 2px dashed var(--accent-1);
+    color: var(--text-main);
+    /* Använd huvudtext-färg för bättre läsbarhet */
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding-bottom: 10px;
+    font-weight: bold;
+    font-size: 12px;
+    border-radius: 10px;
+    /* Behåller 10px för skärmarna */
+    user-select: none;
+    box-sizing: border-box;
+    opacity: 0.6;
+}
+
+#drag-box {
+    position: absolute;
+    background-color: var(--bg-panel);
+    border: 2px solid var(--accent-2);
+    color: var(--text-main);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 18px;
+    letter-spacing: 2px;
+    cursor: grab;
+    user-select: none;
+    z-index: 10;
+    border-radius: 15px;
+    /* --- ÄNDRING: Rundare kanter --- */
+    /* --- ÄNDRING: Vi använder premium-glöden, men en mycket mjukare standard-glöd --- */
+    box-shadow: var(--theme-glow, 0 0 20px rgba(0, 230, 246, 0.25));
+    transition: transform 0.1s, box-shadow 0.1s, scale 0.1s;
+}
+
+#drag-box:active {
+    cursor: grabbing;
+    transform: scale(0.98);
+    box-shadow: var(--theme-glow, 0 0 30px rgba(0, 230, 246, 0.35));
+    /* Lyser starkare */
+}
+
+/* KNAPPAR */
+.button-row {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+/* --- PLAY-KNAPP PÅ PROFILER --- */
+.play-btn {
+    transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    /* Fjädrande animation */
+}
+
+.play-btn:hover {
+    color: #10B981 !important;
+    /* Lyser upp i smaragdgrönt (Play-färg) */
+    transform: scale(1.2) translateY(-2px);
+    /* Poppar ut och upp lite grann */
+    text-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+}
+
+.cyber-btn {
+    flex: 1;
+    border: none;
+    padding: 15px 10px;
+    /* NYTT: Ökat från 12px för tjockare knappar */
+    font-weight: bold;
+    font-size: 16px;
+    /* NYTT: Ökat från 14px */
+    font-family: var(--font-heading);
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: 0.2s;
+    border-radius: 4px;
+}
+
+.teal-btn {
+    background: var(--accent-1);
+    color: var(--bg-main);
+}
+
+.teal-btn:hover {
+    filter: brightness(0.8);
+}
+
+.pink-btn {
+    background: var(--accent-2);
+    color: var(--text-main);
+}
+
+.pink-btn:hover {
+    filter: brightness(0.8);
+}
+
+#status {
+    font-style: italic;
+    font-weight: bold;
+    height: 20px;
+    margin-top: 15px;
+}
+
+/* --- MENYER --- */
+.dropdown-container {
+    position: relative;
+    width: 300px;
+    margin: 20px auto 15px auto;
+    display: flex;
+}
+
+.neon-select {
+    background-color: var(--bg-panel);
+    color: var(--text-main);
+    border: 2px solid var(--accent-1);
+    padding: 10px 15px;
+    font-size: 16px;
+    font-weight: bold;
+    font-family: var(--font-body);
+    border-radius: 4px;
+    width: 300px;
+    outline: none;
+    cursor: pointer;
+    transition: border-color 0.2s;
+
+    /* Gömmer webbläsarens fula standard-pil */
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+}
+
+.neon-select:focus {
+    border-color: var(--accent-2);
+}
+
+.neon-select option {
+    background-color: var(--bg-panel);
+    color: var(--text-main);
+    padding: 10px;
+}
+
+.neon-btn-small {
+    background-color: transparent;
+    color: var(--accent-1);
+    border: 2px solid var(--accent-1);
+    padding: 8px 12px;
+    font-size: 18px;
+    font-weight: bold;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.neon-btn-small:hover {
+    background-color: var(--accent-1);
+    color: var(--bg-main);
+}
+
+/* --- DRAG AND DROP CLEANUP --- */
+.profile-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: var(--bg-panel);
+    padding: 15px 20px;
+    margin-bottom: 10px;
+    border-radius: 8px;
+    border-left: 4px solid var(--accent-1);
+    position: relative;
+    transition: transform 0.15s cubic-bezier(0.2, 0, 0, 1), box-shadow 0.2s;
+    user-select: none;
+    cursor: default;
+}
+
+/* När ett kort flyttas runt av JS, låt det se smidigt ut */
+.profile-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* Gör hela kortet dragbart men visa att man ska hålla i handtaget */
+.drag-handle {
+    padding-right: 15px;
+    cursor: grab;
+    color: var(--text-muted);
+    font-size: 20px;
+}
+
+.drag-handle:active {
+    cursor: grabbing;
+}
+
+.drag-handle:hover {
+    color: var(--accent-1);
+}
+
+.profile-card.dragging {
+    opacity: 0.4;
+    transform: scale(0.98);
+    background: var(--bg-darker);
+    border: 2px dashed var(--accent-1);
+    /* Inaktivera alla animationer på det kortet vi faktiskt håller i */
+    transition: none !important;
+    z-index: 1000;
+}
+
+/* Detta tvingar muspekaren att INTE visa text-markören eller "stopp"-tecken */
+.profile-card.dragging * {
+    pointer-events: none !important;
+}
+
+/* Tvinga webbläsaren att använda flytt-pekaren */
+[draggable="true"] {
+    -webkit-user-drag: element;
+}
+
+.profile-card[draggable="true"] {
+    user-select: none;
+    -webkit-user-drag: element;
+}
+
+.dragging * {
+    pointer-events: none;
+    /* Gör så att musen inte fastnar i texten inuti kortet */
+}
+
+/* Mellanrummet där kortet kommer hamna */
+.profile-card.drag-over {
+    border-top: 3px solid var(--accent-1);
+}
+
+.profile-info {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    /* Tvingar innehållet till vänster */
+    text-align: left;
+    /* Säkerställer att texten inte är centrerad */
+    flex: 1;
+}
+
+.profile-info h3 {
+    margin: 0 0 4px 0;
+    font-size: 1.1em;
+    display: flex;
+    align-items: center;
+    /* Håller ikonen och texten på samma linje */
+    color: var(--text-main);
+}
+
+.profile-info p {
+    margin: 0;
+    font-size: 0.9em;
+    color: var(--text-muted);
+    font-family: var(--font-body);
+}
+
+/* Om du vill att titeln i tabben också ska vara till vänster */
+#profiles-tab h2.neon-title {
+    text-align: left;
+    margin-left: 5px;
+    margin-bottom: 25px;
+}
+
+
+
+
+
+
+.neon-title {
+    color: var(--accent-1);
+    text-shadow: 0 0 10px var(--accent-1);
+    font-family: var(--font-heading);
+    text-align: center;
+    margin-bottom: 20px;
+    letter-spacing: 2px;
+}
+
+/* --- MÅTT-BOXAR --- */
+.res-num {
+    background: var(--bg-darker) !important;
+    color: var(--accent-2) !important;
+    border: 2px solid var(--accent-1) !important;
+    padding: 8px;
+    width: 80px;
+    border-radius: 4px;
+    outline: none;
+    text-align: center;
+    font-weight: bold;
+    font-family: var(--font-heading);
+    transition: 0.2s;
+}
+
+.res-num:focus {
+    border-color: var(--accent-2) !important;
+    box-shadow: 0 0 8px var(--accent-2);
+}
+
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+/* --- TOGGLE SWITCH --- */
+.neon-switch {
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 24px;
+}
+
+.neon-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--bg-panel);
+    transition: .4s;
+    border-radius: 34px;
+    border: 1px solid var(--text-muted);
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 16px;
+    width: 16px;
+    left: 4px;
+    bottom: 3px;
+    background-color: var(--text-main);
+    transition: .4s;
+    border-radius: 50%;
+}
+
+.neon-switch input:checked+.slider {
+    background-color: var(--bg-panel);
+    border-color: var(--accent-1);
+    box-shadow: 0 0 10px var(--accent-1);
+}
+
+.neon-switch input:checked+.slider:before {
+    transform: translateX(24px);
+    background-color: var(--accent-1);
+    box-shadow: 0 0 8px var(--accent-1);
+}
+
+/* --- MODAL (POPUP) --- */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 9999;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(3px);
+
+    /* NYTT: Tvingar centring av innehållet (samma som vi gjorde för bug-report) */
+    justify-content: center;
+    align-items: center;
+}
+
+.modal[style*="display: block"],
+.modal[style*="display: flex"] {
+    display: flex !important;
+}
+
+/* Rutan inuti popupen */
+.modal-content {
+    background-color: var(--bg-darker);
+    border: 2px solid var(--bg-panel);
+    border-radius: 8px;
+    width: 80%;
+    max-width: 480px;
+    text-align: center;
+    position: relative;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
+    color: var(--text-main);
+
+    /* NYTT: Ta bort den gamla margin: 25% auto; och ersätt med detta: */
+    margin: 0;
+    max-height: 85vh;
+    /* Fönstret får aldrig bli högre än 85% av skärmen */
+    overflow-y: auto;
+    /* Aktiverar scroll inuti rutan om det behövs */
+    padding: 30px;
+}
+
+.close-btn {
+    color: var(--text-muted);
+    position: absolute;
+    top: 10px;
+    right: 15px;
+    font-size: 24px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: 0.3s;
+}
+
+.close-btn:hover {
+    color: var(--accent-2);
+}
+
+.modal-button-container {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    margin-top: 20px;
+}
+
+.modal-settings-group {
+    background: var(--bg-main);
+    border: 1px solid var(--bg-panel);
+    border-radius: 8px;
+    padding: 15px;
+    margin: 20px 0;
+    text-align: left;
+}
+
+.setting-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    color: var(--text-main);
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.setting-row:last-child {
+    margin-bottom: 0;
+}
+
+/* --- Centrera specifika inställningsboxar (Hotkey & Boost) --- */
+
+/* Väljer ut de setting-rows som har en border (alltså boxarna) */
+.setting-row[style*="border: 1px solid var(--accent-1)"] {
+    display: flex !important;
+    flex-direction: column !important;
+    /* Staplar innehållet vertikalt */
+    align-items: center !important;
+    /* Centrerar horisontellt */
+    justify-content: center !important;
+    /* Centrerar vertikalt inuti boxen */
+    text-align: center !important;
+    /* Centrerar all text */
+    gap: 15px;
+    /* Skapar ett lagom avstånd mellan text och knapp/switch */
+}
+
+/* Tvinga under-elementen att också centreras om de har egna display-regler */
+.setting-row[style*="border: 1px solid var(--accent-1)"]>div {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* Centrerar "hotkey-input" fältet */
+#hotkey-input {
+    margin-left: auto;
+    margin-right: auto;
+}
+
+/* --- CUSTOM DROPDOWN --- */
+.window-icon {
+    width: 18px;
+    height: 18px;
+    margin-right: 8px;
+    border-radius: 3px;
+    vertical-align: middle;
+}
+
+.custom-select-wrapper {
+    position: relative;
+    user-select: none;
+    width: 300px;
+}
+
+.custom-select-trigger {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    padding: 10px 15px;
+    background-color: var(--bg-darker);
+    border: 1px solid var(--accent-2);
+    border-radius: 6px;
+    cursor: pointer;
+    min-height: 42px;
+    /* Tvingar fram en höjd */
+    box-sizing: border-box;
+    /* Ser till att padding inte spränger layouten */
+}
+
+.custom-select-trigger:hover {
+    border-color: var(--accent-2);
+}
+
+.trigger-content {
+    flex-grow: 1;
+    /* Låter texten ta upp all ledig plats */
+    display: flex;
+    align-items: center;
+    color: var(--text-main);
+    font-size: 0.95rem;
+    font-family: var(--font-body);
+    white-space: nowrap;
+    /* Tvingar texten att stanna på en rad */
+    overflow: hidden;
+    /* Gömmer det som inte får plats */
+    text-overflow: ellipsis;
+    /* Lägger till "..." på slutet */
+}
+
+.trigger-content span {
+    margin-left: 8px;
+    /* Ger lite space mellan fönster-ikonen och texten */
+}
+
+
+/* --- ANIMERADE DROPDOWN-MENYER --- */
+.custom-options {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--bg-panel);
+    border: 1px solid var(--accent-2);
+    border-radius: 6px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+    z-index: 1000 !important;
+    /* Tvingar ut fällningen till VIP-lagret */
+    margin-top: 5px;
+
+    /* Animationen: Börjar osynlig och lite uppflyttad */
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-10px);
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* När menyn är öppen: Synlig och på rätt plats */
+.custom-options.open {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+/* Hover-effekt på valen i listan */
+.custom-option {
+    padding: 12px 15px;
+    cursor: pointer;
+    transition: background 0.15s;
+    display: flex;
+    align-items: center;
+}
+
+.custom-option:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--accent-1);
+}
+
+.custom-option span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+}
+
+.custom-option:last-child {
+    border-bottom: none;
+}
+
+.refresh-btn {
+    position: absolute;
+    right: -50px;
+    top: 0;
+    bottom: 0;
+    height: 100%;
+}
+
+/* --- 2. Fixar mitten-menyn --- */
+.preset-row {
+    position: relative;
+    width: 300px;
+    margin: 0 auto 15px auto;
+}
+
+/* Ritar vår egna dynamiska pil över menyn */
+.preset-row::after {
+    content: '▼';
+    position: absolute;
+    right: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--accent-1);
+    pointer-events: none;
+    /* Gör så att klick går igenom pilen */
+    font-size: 12px;
+}
+
+#resPreset {
+    width: 100%;
+}
+
+.res-input-row {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+    font-family: var(--font-heading);
+    color: var(--accent-1);
+}
+
+.res-input-row label {
+    font-family: var(--font-body);
+    font-weight: bold;
+    font-size: 14px;
+}
+
+.icon-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 20px;
+    cursor: pointer;
+    margin-right: 15px;
+    transition: 0.3s;
+}
+
+.icon-btn:hover {
+    color: var(--text-main);
+    transform: rotate(45deg);
+}
+
+/* --- CUSTOM SCROLLBAR --- */
+::-webkit-scrollbar {
+    width: 8px;
+    background: var(--bg-darker);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--accent-1);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--accent-2);
+}
+
+::-webkit-scrollbar-track {
+    background: var(--bg-panel);
+    border-radius: 4px;
+}
+
+/* --- D-PAD (Finjustering i Kors) --- */
+.d-pad-container {
+    margin-bottom: 20px;
+}
+
+.d-pad-grid {
+    display: grid;
+    grid-template-columns: 40px 40px 40px;
+    /* 3 lika breda kolumner */
+    grid-template-rows: 40px 40px 40px;
+    /* 3 lika höga rader */
+    gap: 5px;
+    justify-content: center;
+    align-items: center;
+}
+
+.d-pad-btn {
+    background: var(--bg-panel);
+    color: var(--accent-1);
+    border: 2px solid var(--accent-1);
+    border-radius: 4px;
+    width: 100%;
+    height: 100%;
+    font-size: 16px;
+    cursor: pointer;
+    transition: 0.2s;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 0;
+}
+
+.d-pad-btn:hover {
+    background: var(--accent-1);
+    color: var(--bg-main);
+}
+
+.d-pad-btn:active {
+    transform: scale(0.9);
+}
+
+.nudge-input {
+    width: 100%;
+    height: 100%;
+    background: var(--bg-darker);
+    color: var(--accent-2);
+    border: 1px solid var(--text-muted);
+    border-radius: 4px;
+    text-align: center;
+    font-weight: bold;
+    font-size: 14px;
+    font-family: var(--font-heading);
+    box-sizing: border-box;
+    /* Ser till att den inte sväller över 40px */
+}
+
+/* Tar bort pilarna inuti nummer-rutan i Chrome/Safari för en renare look */
+.nudge-input::-webkit-outer-spin-button,
+.nudge-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+/* --- NY TVÅKOLUMNS-LAYOUT OVANFÖR KARTAN --- */
+.top-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    margin-top: 15px;
+    margin-bottom: 5px;
+}
+
+.left-controls {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    /* Tvingar allt till vänster */
+}
+
+.right-controls {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-right: 15px;
+    /* Liten marginal från högerkanten */
+}
+
+/* Skriver över de gamla centreringarna så de håller sig till vänster */
+.left-controls .dropdown-container,
+.left-controls .preset-row {
+    margin: 0 0 15px 0 !important;
+}
+
+.left-controls .res-input-row {
+    justify-content: flex-start !important;
+    margin-bottom: 0 !important;
+}
+
+.right-controls .d-pad-container {
+    margin-bottom: 0 !important;
+    /* Tar bort marginalen i botten */
+}
+
+/* --- VISUAL MAP TAB: POLISHED REDESIGN --- */
+
+.map-tab-wrapper .container {
+    padding-top: 15px;
+}
+
+.container,
+.modal-content {
+    /* --- ÄNDRING: Rundare kanter --- */
+    border-radius: 25px;
+    /* --- ÄNDRING: Vi använder premium-skuggan, men en mycket mjukare standard-skugga --- */
+    box-shadow: var(--theme-shadow, 0 8px 30px rgba(0, 0, 0, 0.3));
+}
+
+/* =======================================================
+   SLUTGILTIGA LAYOUT-FIXAR (Skriver över gamla regler)
+   ======================================================= */
+
+/* 1. TVINGA PANELARNA ATT VARA EXAKT LIKA HÖGA */
+.map-top-controls {
+    align-items: stretch !important;
+    position: relative !important;
+    z-index: 100 !important;
+}
+
+.right-panel {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    /* Detta trycker upp titeln till toppen! */
+}
+
+
+
+/* 3. PERFEKT CENTRERAD D-PAD */
+.d-pad-grid-reworked {
+    display: grid !important;
+    /* Krymper kolumnerna/raderna för pilarna så de sitter närmare cirkeln */
+    grid-template-columns: 34px 44px 34px !important;
+    grid-template-rows: 34px 44px 34px !important;
+    gap: 4px !important;
+    /* Mycket litet avstånd */
+    place-items: center !important;
+    /* Tvingar allt att ligga EXAKT i mitten av sitt utrymme */
+    margin: 15px auto !important;
+    /* Centrerar hela d-padden i sidled */
+}
+
+.d-pad-display-polished {
+    width: 44px !important;
+    height: 44px !important;
+    margin: 0 auto !important;
+    /* Säkerställer att cirkeln sitter i mitten av sin ruta */
+    padding: 0 !important;
+    line-height: 44px !important;
+}
+
+
+/* Flexbox för de två översta kontroll-korten */
+.map-top-controls {
+    display: flex;
+    justify-content: space-between;
+    gap: 25px;
+    margin-bottom: 25px;
+    align-items: flex-start;
+    position: relative !important;
+    z-index: 100 !important;
+}
+
+.control-panel {
+    background-color: var(--bg-panel);
+    padding: 25px;
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(128, 128, 128, 0.1);
+    flex: 1;
+    position: relative !important;
+    z-index: 100 !important;
+
+    /* NYTT: Tvinga alla paneler att börja fylla på från toppen */
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+}
+
+/* Panel-titlar */
+.panel-title {
+    margin-top: 0;
+    margin-bottom: 20px;
+    color: var(--accent-1);
+    font-size: 1.15rem;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-family: var(--font-heading);
+}
+
+/* En snygg linje-accent under panel-titeln */
+.panel-title::after {
+    content: '';
+    display: block;
+    flex-grow: 1;
+    height: 1px;
+    background: linear-gradient(90deg, var(--accent-1), transparent);
+}
+
+/* Gruppering för varje kontroll (etikett + input) */
+.control-group {
+    margin-bottom: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    position: relative;
+    width: 100%;
+}
+
+.control-group label {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    font-weight: bold;
+    font-family: var(--font-body);
+}
+
+/* Snygga till select-dropdowns */
+.neon-select {
+    width: 100%;
+    padding: 12px 40px 12px 15px;
+    /* Extra padding till höger */
+    background-color: var(--bg-darker);
+    color: var(--text-main);
+    border: 1px solid var(--accent-2);
+    border-radius: 6px;
+    font-size: 0.95rem;
+    appearance: none;
+    background-image: url('data:image/svg+xml;charset=UTF-8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="gray" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>');
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+}
+
+.neon-select:focus,
+.neon-select:hover {
+    outline: none;
+    border-color: var(--accent-1);
+    box-shadow: 0 0 8px rgba(174, 183, 132, 0.25);
+}
+
+/* Fix för refresh-knappens placering */
+.control-group .refresh-btn {
+    position: absolute;
+    right: -30px;
+    /* Flytta ut den lite från dropdownen */
+    bottom: 10px;
+    background: transparent;
+    border: none;
+    color: var(--accent-1);
+    cursor: pointer;
+    font-size: 1.2rem;
+    transition: 0.2s;
+}
+
+/* Justering av custom resolution fälten för bättre linjering */
+.custom-res-fields {
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px dashed rgba(128, 128, 128, 0.25);
+}
+
+.res-input-row-polished {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg-darker);
+    padding: 10px;
+    border-radius: 6px;
+    border: 1px solid var(--accent-2);
+}
+
+.res-num-polished {
+    width: 70px;
+    border: none;
+    background: transparent;
+    color: var(--text-main);
+    font-weight: bold;
+    font-size: 1rem;
+    text-align: center;
+}
+
+/* Compact instruktion för d-pad panelen */
+.instruction-compact {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-top: -10px;
+    margin-bottom: 20px;
+    font-style: italic;
+    text-align: center;
+}
+
+/* --- REWORKED POLISHED D-PAD --- */
+.d-pad-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+}
+
+/* 3. PERFEKT CENTRERAD OCH TAJT D-PAD */
+.d-pad-grid-reworked {
+    display: grid !important;
+    grid-template-columns: 34px 44px 34px !important;
+    grid-template-rows: 34px 44px 34px !important;
+    gap: 4px !important;
+    /* Tajt avstånd */
+    place-items: center !important;
+    /* Låser exakt i mitten */
+    margin: 15px auto !important;
+}
+
+.d-pad-display-polished::-webkit-outer-spin-button,
+.d-pad-display-polished::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.d-pad-display-polished:focus {
+    border-color: var(--accent-1);
+    box-shadow: 0 0 8px var(--accent-1);
+}
+
+.d-pad-btn-polished {
+    background-color: transparent;
+    border: 2px solid var(--accent-1);
+    color: var(--accent-1);
+    font-size: 1.1rem;
+    width: 34px !important;
+    /* Fasta, lite mindre mått på pilarna */
+    height: 34px !important;
+    /* Fasta, lite mindre mått på pilarna */
+    border-radius: 6px !important;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 0;
+    margin: 0 !important;
+}
+
+.d-pad-btn-polished:hover {
+    background-color: var(--accent-1);
+    color: var(--bg-panel);
+    transform: scale(1.05);
+}
+
+/* Central display för visuell feedback */
+.d-pad-display-polished {
+    width: 44px !important;
+    /* Måste vara exakt samma som mitten-kolumnen i grid! */
+    height: 44px !important;
+    /* Måste vara exakt samma som mitten-raden i grid! */
+    border: 2px solid var(--accent-2);
+    border-radius: 50%;
+    background-color: var(--bg-darker);
+    color: var(--accent-1);
+    text-align: center;
+    font-family: var(--font-heading);
+    font-weight: bold;
+    font-size: 1rem;
+    outline: none;
+    transition: 0.2s;
+    margin: 0 !important;
+    /* Säkerställer att den inte puttas ur position */
+    padding: 0 !important;
+}
+
+/* Pixel-rutan integreras snyggt under d-paden */
+.nudge-control-row {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+    margin-top: 20px;
+    padding: 10px;
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 6px;
+}
+
+.nudge-input-compact {
+    width: 50px;
+    text-align: center;
+    background-color: var(--bg-darker);
+    color: var(--accent-2);
+    border: 1px solid var(--accent-2);
+    border-radius: 4px;
+    padding: 8px;
+    font-size: 0.9rem;
+    font-family: var(--font-heading);
+}
+
+.map-area-wrapper-polished {
+    background-color: rgba(128, 128, 128, 0.03);
+    padding: 25px;
+    border-radius: 10px;
+    position: relative !important;
+    z-index: 1 !important;
+
+    /* NYTT: Tvingar boxen att fylla hela bredden */
+    width: 100%;
+    box-sizing: border-box;
+    margin-top: 25px;
+    /* Skapar ett fint avstånd till de övre boxarna */
+}
+
+/* Ersätt din gamla .button-row-centered om du har en, annars lägg till denna: */
+.button-row-centered {
+    display: flex;
+    justify-content: space-between;
+    gap: 25px;
+    /* Samma gap som mellan dina två övre inställningsboxar! */
+    width: 100%;
+    margin-top: 20px;
+}
+
+/* Tvingar båda knapparna att bli exakt lika breda och fylla ut rowen */
+.button-row-centered .cyber-btn {
+    flex: 1;
+    /* Båda tar 50% av utrymmet minus gapet */
+    padding: 20px 10px;
+    /* Maffigare höjd på knapparna */
+    font-size: 1.1rem;
+    letter-spacing: 2px;
+}
+
+#monitor-map {
+    border: 2px solid var(--accent-2);
+    border-radius: 6px;
+    background-color: var(--bg-darker);
+    overflow: hidden;
+    margin-bottom: 25px;
+}
+
+/* --- BUTTON ROW & STATUS --- */
+.button-row {
+    margin-bottom: 15px;
+    justify-content: center;
+    /* Centrera Apply/Restore knapparna */
+}
+
+/* Centrera och styla status texten mer diskret */
+#status-polished {
+    text-align: center;
+    width: 100%;
+    color: var(--accent-1);
+    font-family: var(--font-body);
+    font-size: 0.85rem;
+    margin-top: 10px;
+}
+
+/* =======================================================
+   MJUKA ANIMATIONER (Uppstart & Tab-byten)
+   ======================================================= */
+
+/* Grund-animation: Glid upp och tona in */
+@keyframes slideFadeUp {
+    0% {
+        opacity: 0;
+        transform: translateY(15px);
+    }
+
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Enkel mjuk intoning */
+@keyframes simpleFade {
+    0% {
+        opacity: 0;
+    }
+
+    100% {
+        opacity: 1;
+    }
+}
+
+/* 1. Animera in HELA tabben varje gång du byter sida */
+.tab-content {
+    animation: slideFadeUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+
+
+
+/* =======================================================
+   2. DOMINO-EFFEKT (Staggering) BARA PÅ STARTSIDAN
+   Vi använder en liten fördröjning på varje element!
+   ======================================================= */
+
+/* Vänster panel (Configure Window) - Kommer in nästan direkt */
+.map-top-controls .control-panel:nth-child(1) {
+    opacity: 0;
+    /* Göm den innan animationen startar */
+    animation: slideFadeUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.05s forwards;
+}
+
+/* Höger panel (Fine-Tune D-pad) - Kommer in en bråkdel efter */
+.map-top-controls .control-panel:nth-child(2) {
+    opacity: 0;
+    animation: slideFadeUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.15s forwards;
+}
+
+/* Kart-rutan i botten - Kommer in därefter */
+.map-area-wrapper-polished {
+    opacity: 0;
+    animation: slideFadeUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.25s forwards;
+}
+
+/* Knapparna Apply/Restore - Tonar in lugnt på slutet */
+.button-row {
+    opacity: 0;
+    animation: simpleFade 0.6s ease 0.35s forwards;
+}
+
+
+/* =======================================================
+   CYBERPUNK SPLASH SCREEN (Täcker appen under laddning)
+   ======================================================= */
+#splash-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: var(--bg-main);
+    /* Matchar temats bakgrund */
+    z-index: 9999;
+    /* Alltid överst */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: opacity 0.5s ease, visibility 0.5s ease;
+    user-select: none;
+    pointer-events: all;
+    /* Hindrar klick genom */
+}
+
+/* Klass för att tona bort och dölja splash screenen */
+#splash-screen.hide-splash {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    /* Låter klick gå igenom efter borttoning */
+}
+
+.splash-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 30px;
+    text-align: center;
+}
+
+/* --- LOGO-ANIMATION --- */
+.cyber-logo-wrapper {
+    position: relative;
+    width: 80px;
+    height: 80px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.cyber-logo-frame {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    border: 3px solid var(--accent-1);
+    box-shadow: 0 0 15px var(--accent-1);
+    border-radius: 8px;
+    /* Roterande ram */
+    animation: cyberSpin 4s linear infinite;
+}
+
+.cyber-logo-icon {
+    font-family: var(--font-heading);
+    font-size: 2.5rem;
+    font-weight: bold;
+    color: var(--text-main);
+    text-shadow: 0 0 10px var(--text-main);
+}
+
+@keyframes cyberSpin {
+    0% {
+        transform: rotate(0deg);
+        border-color: var(--accent-1);
+        box-shadow: 0 0 15px var(--accent-1);
+    }
+
+    50% {
+        transform: rotate(180deg);
+        border-color: var(--accent-2);
+        box-shadow: 0 0 15px var(--accent-2);
+    }
+
+    100% {
+        transform: rotate(360deg);
+        border-color: var(--accent-1);
+        box-shadow: 0 0 15px var(--accent-1);
+    }
+}
+
+/* --- LOADING BAR --- */
+.loading-bar-wrapper {
+    width: 180px;
+    height: 4px;
+    background: var(--bg-panel);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.loading-bar {
+    width: 0%;
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent-1), var(--accent-2));
+    /* Pulserande in-toning av bar (vi simulerar laddning via CSS-tid) */
+    animation: fillBar 1.5s ease-out forwards;
+}
+
+@keyframes fillBar {
+    0% {
+        width: 0%;
+    }
+
+    100% {
+        width: 100%;
+    }
+}
+
+/* --- TEXT --- */
+.loading-text {
+    font-size: 1rem;
+    color: var(--accent-1);
+    font-family: var(--font-body);
+    text-shadow: 0 0 8px var(--accent-1);
+    letter-spacing: 1px;
+}
+
+/* =======================================================
+   ANIMATION: MODAL (Profile Settings Popup)
+   ======================================================= */
+
+/* Animerar den mörka, suddiga bakgrunden */
+@keyframes modalFadeIn {
+    0% {
+        opacity: 0;
+    }
+
+    100% {
+        opacity: 1;
+    }
+}
+
+/* Animerar själva inställningsrutan (pop-effekt) */
+@keyframes modalPopIn {
+    0% {
+        opacity: 0;
+        transform: scale(0.85) translateY(20px);
+    }
+
+    100% {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+/* Koppla animationerna till dina befintliga klasser */
+.modal {
+    animation: modalFadeIn 0.25s ease-out forwards !important;
+    pointer-events: auto;
+}
+
+
+/* =======================================================
+   ANIMATION: STÄNG MODAL (Pop-out)
+   ======================================================= */
+
+/* Animerar bort den mörka bakgrunden */
+@keyframes modalFadeOut {
+    0% {
+        opacity: 1;
+    }
+
+    100% {
+        opacity: 0;
+    }
+}
+
+/* Animerar bort rutan (krymper och åker ner) */
+@keyframes modalPopOut {
+    0% {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+
+    100% {
+        opacity: 0;
+        transform: scale(0.85) translateY(20px);
+    }
+}
+
+/* Denna klass läggs till av JavaScript när man stänger! */
+.modal.closing {
+    animation: modalFadeOut 0.25s ease-in forwards !important;
+}
+
+.modal.closing .modal-content {
+    animation: modalPopOut 0.25s cubic-bezier(0.82, 0.085, 0.395, 0.895) forwards !important;
+}
+
+
+
+/* Säkerställ att popup-knappar alltid tar emot klick */
+.modal-button-container button {
+    position: relative;
+    z-index: 10001;
+    pointer-events: auto !important;
+    cursor: pointer !important;
+}
+
+/* Tvinga muspekaren att vara "grabbing" överallt när man drar */
+body.global-dragging,
+body.global-dragging * {
+    cursor: grabbing !important;
+}
+
+/* Gör spöket (bilden man drar) lite snyggare i vissa webbläsare */
+.profile-card.dragging {
+    cursor: grabbing !important;
+}
+
+/* --- TOTAL MUSPEKAR-KONTROLL --- */
+
+/* När vi drar, tvinga HELA skärmen att använda 'grabbing'-handen */
+html.is-dragging-active,
+html.is-dragging-active * {
+    cursor: grabbing !important;
+    /* Hindrar att man råkar markera text mitt i draget, vilket orsakar blinkningar */
+    user-select: none !important;
+}
+
+.profile-card.dragging {
+    opacity: 0.5;
+    background: var(--bg-darker);
+    border: 2px dashed var(--accent-1);
+    /* VIKTIGT: Detta stoppar lagg och flimmer! */
+    transform: scale(0.98);
+    /* Gör det lite mindre så det är tydligt att det är "löst" */
+    transition: none !important;
+    z-index: 9999;
+}
+
+/* Behåll denna för att stoppa lagg! */
+.profile-card.dragging * {
+    pointer-events: none !important;
+}
+
+/* Gör att korten som ligger kvar inte reagerar på musen (sparar CPU och minskar flimmer) */
+html.is-dragging-active .profile-card:not(.dragging) {
+    pointer-events: none;
+}
+
+
+/* --- CUSTOM TOOLTIPS (Svävande info-rutor) --- */
+.has-tooltip {
+    position: relative;
+    cursor: help;
+    /* Ändrar muspekaren till ett frågetecken (valfritt, men snyggt) */
+    pointer-events: auto !important;
+}
+
+/* Själva rutan som är gömd som standard */
+.has-tooltip::after {
+    content: attr(data-tooltip);
+    /* Hämtar texten direkt från HTML-koden */
+    position: absolute;
+    bottom: 130%;
+    /* Placerar den ovanför texten */
+    left: 0;
+    width: 220px;
+    /* Gör rutan lagom bred så texten kan radbrytas */
+    padding: 10px;
+    background: var(--bg-darker);
+    color: var(--text-main);
+    border: 1px solid var(--accent-1);
+    border-radius: 8px;
+    font-size: 0.8rem;
+    font-family: var(--font-body);
+    font-weight: normal;
+
+    /* Animation och osynlighet */
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(10px);
+    transition: all 0.2s ease-in-out;
+
+    /* Ligger alltid överst och blockerar inte musen */
+    z-index: 9999;
+    pointer-events: none;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+}
+
+/* En liten pil som pekar ner mot inställningen */
+.has-tooltip::before {
+    content: '';
+    position: absolute;
+    bottom: 110%;
+    left: 15px;
+    /* Pilen hamnar lite till vänster */
+    border-width: 6px;
+    border-style: solid;
+    border-color: var(--accent-1) transparent transparent transparent;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(10px);
+    transition: all 0.2s ease-in-out;
+    z-index: 10000;
+}
+
+/* Tvinga tooltipen att alltid ha full opacitet när den visas, även om föräldern är 0.5 */
+.has-tooltip:hover::after,
+.has-tooltip:hover::before {
+    opacity: 1 !important;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+/* --- UTGRÅADE INSTÄLLNINGAR --- */
+/* Gör bara den inre texten och reglaget genomskinligt, så tooltipen bevaras i 100% färg! */
+.disabled-setting .dim-text {
+    opacity: 0.5;
+}
+
+.disabled-setting .neon-switch {
+    opacity: 0.5;
+    pointer-events: none;
+    /* Stänger bara av klick på switchen */
+}
+
+/* ============================================================
+   UPPDATERAT NAVIGERINGSFÄLT (TABS) - FIXAD STORLEK OCH CENTRERAD
+============================================================ */
+.tabs {
+    display: flex;
+    align-items: center;
+    background: var(--bg-panel);
+    border-bottom: 2px solid var(--bg-darker);
+    width: 100%;
+    max-width: 840px;
+    /* Denna matchar dina två boxar */
+    margin: 0 auto 20px auto;
+    /* Centrerar baren */
+    border-radius: 8px 8px 0 0;
+    overflow: hidden;
+}
+
+.tab-btn {
+    flex: 1;
+    background: none;
+    border: none;
+    padding: 18px 0;
+    color: var(--text-muted);
+    font-family: var(--font-heading);
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+
+    /* DENNA MAGISKA RAD LÅSER FAST UNDERSTRYKNINGEN: */
+    position: relative;
+}
+
+/* Effekt vid hover och aktiv flik */
+.tab-btn:hover,
+.tab-btn.active {
+    color: var(--accent-1);
+    /* Din teal/neon-färg */
+    background: rgba(0, 229, 255, 0.03);
+    /* Mycket svagt sken */
+}
+
+/* Den understrykande neon-linjen för aktiv flik */
+.tab-btn.active::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    /* Ligger precis på border-bottom */
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background: var(--accent-1);
+    box-shadow: 0 0 10px var(--accent-1);
+}
+
+/* ============================================================
+   REPORT BUG MODAL - FIXAD LAYOUT OCH SCROLLNING
+============================================================ */
+/* --- NAV IKONER (Bugg & Donate) --- */
+.nav-icon-btn {
+    background: none;
+    border: none;
+    padding: 0 20px;
+    /* Minskade paddingen lite så båda får bra plats */
+    height: 100%;
+    font-size: 1.4rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-left: 1px solid var(--bg-darker);
+    transition: all 0.3s ease;
+}
+
+.nav-icon-btn:hover {
+    color: var(--accent-1);
+    /* Båda lyser upp i teal/neon när man hovrar */
+    background: rgba(0, 229, 255, 0.05);
+}
+
+/* Om du vill behålla den rosa/röda färgen specifikt för bugg-knappen vid hover: */
+.nav-icon-btn[title="Report a bug"]:hover {
+    color: var(--accent-2);
+    background: rgba(255, 51, 102, 0.05);
+}
+
+/* ============================================================
+   STYLING FÖR BUG-MODAL (INGEN OVERFLOW)
+============================================================ */
+.modal#bug-modal .modal-content {
+    max-height: 80vh;
+    overflow-y: auto;
+    padding: 30px;
+
+    /* LÄGG TILL DESSA: */
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+}
+
+#bug-form .control-group label {
+    color: var(--accent-2);
+    font-family: var(--font-heading);
+    font-size: 0.85rem;
+    margin-bottom: 8px;
+    display: block;
+}
+
+#bug-form input,
+#bug-form textarea {
+    width: 100%;
+    /* Gör dem så långa som möjligt */
+    box-sizing: border-box;
+    padding: 15px;
+    /* Ökad padding gör boxarna högre och luftigare */
+    background: var(--bg-panel) !important;
+    border: 1px solid var(--bg-darker);
+    color: var(--text-main);
+    border-radius: 6px;
+    font-family: var(--font-body);
+    font-size: 1rem;
+    /* Gör texten lite tydligare */
+}
+
+/* Specifik höjd för meddelandeboxen */
+#bug-form textarea {
+    height: 180px;
+    /* Ökad från 120/150px för att ge mer skrivplats */
+    line-height: 1.5;
+}
+
+#bug-form input:focus,
+#bug-form textarea:focus {
+    outline: none;
+    border-color: var(--accent-2);
+    box-shadow: 0 0 5px rgba(255, 51, 102, 0.3);
+}
+
+/* Bekräftelse-texten */
+#bug-status {
+    padding: 10px;
+    border-radius: 4px;
+    font-weight: bold;
+}
+
+/* Rensa tidigare margins från formulärets element och sätt storlek via CSS */
+#bug-form .control-group {
+    margin: 0;
+}
+
+#bug-form textarea {
+    margin: 0;
+    height: 120px;
+    /* Sätt höjden här istället för inline i HTML */
+}
+
+#bug-submit-btn {
+    width: 100%;
+    padding: 15px;
+    /* Matchar höjden på de andra boxarna */
+    font-size: 1.1rem;
+    margin-top: 10px;
+}
+
+/* ============================================================
+   UPPDATERADE ANIMATIONER FÖR BUG-MODAL (IN & UT)
+============================================================ */
+
+/* 1. Definiera Keyframes för öppning (fada in och skala upp) */
+@keyframes bugModalFadeInScale {
+    from {
+        opacity: 0;
+        transform: scale(0.9) translateY(-20px);
+        /* Startar lite mindre och högre upp */
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+@keyframes bugModalFadeOutScale {
+    from {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+
+    to {
+        opacity: 0;
+        transform: scale(0.9) translateY(20px);
+    }
+}
+
+
+
+#bug-form {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    width: 100%;
+    /* Tvingar formuläret att fylla ut bredden */
+    margin-top: 15px;
+}
+
+#bug-form label {
+    color: var(--accent-2);
+    font-size: 0.85rem;
+    font-weight: bold;
+    margin-bottom: -5px;
+    /* Drar labeln närmare sitt input-fält */
+}
+
+/* 4. Klass för ÖPPNINGS-animationen */
+.bug-open-animation {
+    display: flex !important;
+    animation: bugModalFadeInScale 0.3s ease-out forwards !important;
+    pointer-events: auto !important;
+}
+
+/* 5. Klass för STÄNGNINGS-animationen */
+.bug-close-animation {
+    animation: bugModalFadeOutScale 0.3s ease-in forwards !important;
+    pointer-events: none !important;
+}
+
+/* ============================================================
+   UPPDATERAD CSS FÖR BUG-MODAL CONTAINER (OVERLAY)
+============================================================ */
+#bug-modal {
+    /* 1. Standard-läge: Osynligt */
+    display: none;
+
+    /* 2. Gör den till en fullskärms-overlay som ligger ovanpå allt */
+    position: fixed;
+    /* Låser fast den på skärmen */
+    top: 0;
+    left: 0;
+    width: 100%;
+    /* Tar upp hela bredden */
+    height: 100%;
+    /* Tar upp hela höjden */
+
+    /* 3. Skapa den mörka, semi-transparenta bakgrunden (Dimmningen!) */
+    background-color: rgba(0, 0, 0, 0.7);
+    /* Svart med 70% opacitet */
+
+    /* 4. Z-index ser till att den hamnar högst upp */
+    z-index: 9999;
+    /* Ett väldigt högt värde */
+
+    /* 5. Centerera modal-content (pink box) perfekt inuti overlayen */
+    justify-content: center;
+    /* Horisontell centrering */
+    align-items: center;
+    /* Vertikal centrering */
+}
+
+/* När JavaScript sätter modal.style.display = 'flex', då gäller detta: */
+#bug-modal[style*="display: flex"] {
+    display: flex !important;
+}
+
+.cyber-search-input {
+    background: var(--bg-darker);
+    border: 1px solid var(--bg-panel);
+    border-radius: 6px;
+    padding: 12px 15px;
+    color: var(--text-main);
+    font-family: var(--font-body);
+    outline: none;
+    transition: border-color 0.3s ease;
+}
+
+.cyber-search-input:focus {
+    border-color: var(--accent-1);
+    box-shadow: 0 0 10px rgba(0, 229, 255, 0.1);
+}
+
+/* --- SETTINGS ACCORDION --- */
+.settings-accordion {
+    background-color: transparent;
+    border: 2px solid var(--bg-panel);
+    border-radius: 8px;
+    margin-bottom: 20px;
+    overflow: hidden;
+    transition: border-color 0.3s;
+}
+
+.settings-accordion:hover {
+    border-color: var(--accent-1);
+}
+
+.accordion-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 25px;
+    background-color: var(--bg-panel);
+    cursor: pointer;
+    user-select: none;
+}
+
+.accordion-arrow {
+    color: var(--accent-1);
+    font-size: 1.2rem;
+    transition: transform 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+/* --- ACCORDION ANIMATION --- */
+.accordion-content {
+    display: grid;
+    grid-template-rows: 0fr;
+    /* CSS Grid trick för mjuka höjd-animationer! */
+    transition: grid-template-rows 0.4s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.3s ease;
+    opacity: 0;
+    padding: 0 20px;
+}
+
+.accordion-content.open {
+    grid-template-rows: 1fr;
+    /* Växer exakt till innehållets höjd */
+    opacity: 1;
+    padding: 25px 20px 30px 20px;
+}
+
+.accordion-inner-wrapper {
+    overflow: hidden;
+    /* Måste ha overflow hidden för Grid-tricket */
+    padding-bottom: 5px;
+    /* Lite extra marginal i botten för säkerhets skull */
+}
