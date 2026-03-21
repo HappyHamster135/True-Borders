@@ -24,6 +24,8 @@ const MIN_INNER_HEIGHT = 750;
 // ==========================================================================
 
 async function initMap() {
+    loadAppVersion();
+
     await eel.set_app_on_top()();
     await populateWindowDropdown();
 
@@ -1404,9 +1406,56 @@ window.addEventListener('resize', () => {
 function closeApp() { window.close(); }
 function hideToTray() { eel.hide_to_tray()(); }
 
-
 // ==========================================================================
-//  12. KÖRS NÄR HELA SIDAN HAR LADDAT
+//  12. AUTO UPDATER
+// ==========================================================================
+
+async function loadAppVersion() {
+    try {
+        // Lägg märke till TVÅ par parenteser: ()()
+        let version = await eel.get_current_version()();
+        let displayEl = document.getElementById("app-version-display");
+        if (displayEl) displayEl.innerText = version;
+    } catch (err) {
+        console.error("Kunde inte ladda version:", err);
+    }
+}
+
+async function manualUpdateCheck() {
+    const btn = event.target;
+    const originalText = btn.innerText;
+    btn.innerText = "Söker...";
+    btn.disabled = true;
+
+    try {
+        let result = await eel.check_for_updates()();
+
+        if (result.update_available) {
+            if (confirm(`En ny version (v${result.version}) hittades!\n\nVill du ladda ner och installera den nu? Programmet kommer att startas om.`)) {
+                btn.innerText = "Laddar ner...";
+                let success = await eel.perform_update(result.url)();
+                if (success === false) {
+                    alert("Ett fel uppstod vid uppdateringen. Vänligen kolla konsolen eller kör som administratör.");
+                    btn.innerText = originalText;
+                    btn.disabled = false;
+                }
+            } else {
+                btn.innerText = originalText;
+                btn.disabled = false;
+            }
+        } else {
+            alert("Du har redan den senaste versionen!");
+            btn.innerText = originalText;
+            btn.disabled = false;
+        }
+    } catch (err) {
+        alert("Kunde inte söka efter uppdateringar. Kolla din internetuppkoppling.");
+        btn.innerText = originalText;
+        btn.disabled = false;
+    }
+}
+// ==========================================================================
+//  13. KÖRS NÄR HELA SIDAN HAR LADDAT
 // ==========================================================================
 document.addEventListener('DOMContentLoaded', () => {
     checkAdminStatus();

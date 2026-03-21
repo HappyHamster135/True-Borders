@@ -30,7 +30,7 @@ import urllib.request
 # ==============================================================================================
 
 # Sätt din nuvarande version här
-CURRENT_VERSION = "1.0.0" 
+CURRENT_VERSION = "1.0.1" 
 # URL till en JSON-fil som du lägger på t.ex. GitHub (Raw länk)
 UPDATE_INFO_URL = "https://raw.githubusercontent.com/HappyHamster135/True-Borders/main/update.json"
 
@@ -69,6 +69,10 @@ APP_NAME = "True Borders"
 
 start_minimized = "--autostart" in sys.argv
 
+
+@eel.expose
+def get_current_version():
+    return CURRENT_VERSION
 # ==============================================================================================
 # 2. PROFILHANTERING OCH AUTO-LAUNCHER
 # ==============================================================================================

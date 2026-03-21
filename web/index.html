@@ -257,7 +257,17 @@
                                         onchange="importProfiles(event)">
                                 </div>
                             </div>
-
+                            <div class="setting-row"
+                                style="padding: 15px; border: 1px solid var(--bg-panel); border-radius: 8px; display: flex; justify-content: space-between; align-items: center; margin: 0;">
+                                <span style="font-weight: bold; color: var(--accent-1); font-family: var(--font-body);">
+                                    Version <span id="app-version-display"
+                                        style="color: var(--text-color);">Laddar...</span>
+                                </span>
+                                <button class="neon-btn-small" onclick="manualUpdateCheck()"
+                                    title="Check for new updates" style="padding: 5px 12px; font-size: 14px;">
+                                    Sök uppdatering
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -312,8 +322,8 @@
             <button class="cyber-btn pink-btn" onclick="exitApp()" style="flex: 1; margin: 0;">
                 Exit App
             </button>
-
         </div>
+
     </section>
 
     </div>
