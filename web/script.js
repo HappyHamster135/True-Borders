@@ -1404,6 +1404,7 @@ window.addEventListener('resize', () => {
 
 // App-kontroller (Exit & Göm)
 function closeApp() { window.close(); }
+function exitApp() { window.close(); }
 function hideToTray() { eel.hide_to_tray()(); }
 
 // ==========================================================================

@@ -30,7 +30,7 @@ import urllib.request
 # ==============================================================================================
 
 # Sätt din nuvarande version här
-CURRENT_VERSION = "1.0.1" 
+CURRENT_VERSION = "1.0.0" 
 # URL till en JSON-fil som du lägger på t.ex. GitHub (Raw länk)
 UPDATE_INFO_URL = "https://raw.githubusercontent.com/HappyHamster135/True-Borders/main/update.json"
 
