@@ -710,7 +710,7 @@ def check_for_updates():
 
 @eel.expose
 def perform_update(download_url):
-    """Den garanterade auto-updatern med 'Explorer'-tricket."""
+    """Debug-version av Auto-updatern som visar exakt vad som händer."""
     try:
         if not getattr(sys, 'frozen', False):
             print("Körs inte som en kompilerad .exe.")
@@ -723,38 +723,61 @@ def perform_update(download_url):
         new_exe_path = os.path.join(temp_dir, "TrueBorders_New.exe")
         bat_path = os.path.join(temp_dir, "update_tb.bat")
 
-        print(f"Laddar ner från: {download_url}")
-        urllib.request.urlretrieve(download_url, new_exe_path)
+        # --- LÄGGER TILL CACHE-BUSTING ---
+        # Tvingar datorn att ladda ner en helt ny fil från GitHub och inte använda minnet
+        import time
+        safe_url = f"{download_url}?t={int(time.time())}"
+        urllib.request.urlretrieve(safe_url, new_exe_path)
 
         if os.path.getsize(new_exe_path) < 1000000:
-            print("Nedladdad fil är för liten (troligen korrupt).")
             return False
 
+        # --- SYNLIGT BAT-SKRIPT ---
         bat_content = f"""@echo off
-:: Vantar 3 sekunder sa programmet hinner stanga ner
-ping 127.0.0.1 -n 4 > nul
+title True Borders Auto-Updater
+color 0B
+echo ==============================================
+echo STARTAR UPPFATERING AV TRUE BORDERS
+echo ==============================================
+echo.
+echo 1. Vantar 4 sekunder pa att programmet ska stanga ner...
+ping 127.0.0.1 -n 5 > nul
 
-:CopyLoop
-:: Skriv over den gamla filen
-copy /Y "{new_exe_path}" "{current_exe}" > nul 2>&1
+echo.
+echo 2. Forsoker skriva over den gamla filen...
+copy /Y "{new_exe_path}" "{current_exe}"
 if errorlevel 1 (
-    ping 127.0.0.1 -n 2 > nul
-    goto CopyLoop
+    color 0C
+    echo.
+    echo [FEL!] Kunde inte skriva over filen!
+    echo Detta beror formodligen pa att True Borders fortfarande ar igang.
+    echo Ligger det kvar en gron ikon nere i System Tray vid klockan?
+    pause
+    exit
 )
 
-:: --- SILVER BULLET FIXEN ---
-:: Vi later Windows Utforskare starta filen. Detta raderar ALLA osynliga PyInstaller-variabler!
+echo.
+echo [SUCCE!] Filen ar utbytt.
+echo 3. Startar nya True Borders...
 explorer.exe "{current_exe}"
 
-:: Stada upp Temp-filerna
+echo.
+echo ==============================================
+echo UPPDRAG SLUTFORTH! (Pausar sa du hinner lasa)
+echo ==============================================
+pause
+
+echo.
+echo 4. Stadar upp...
 del "{new_exe_path}"
-del "%~f0"
+(goto) 2>nul ^& del "%~f0"
 """
         with open(bat_path, "w", encoding="utf-8") as bat_file:
             bat_file.write(bat_content)
 
-        # Vi behöver inte ens skicka med clean_env längre, explorer.exe löser allt!
-        subprocess.Popen([bat_path], shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
+        # Vi plockar bort "CREATE_NO_WINDOW" så att fönstret faktiskt poppar upp!
+        # Använder CREATE_NEW_CONSOLE för att tvinga fram det.
+        subprocess.Popen([bat_path], creationflags=subprocess.CREATE_NEW_CONSOLE)
         
         return True
         
