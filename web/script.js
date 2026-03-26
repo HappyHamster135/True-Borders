@@ -285,10 +285,7 @@ async function initMap() {
         }
     }, 2500);
 
-    // Gömmer i bakgrunden om det är definierat så
-    if (window.screenX > 5000) {
-        eel.hide_to_tray()();
-    }
+
     setInterval(autoApplyScanner, 2000);
 }
 

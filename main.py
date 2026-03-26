@@ -77,10 +77,8 @@ def get_setting(key, default_val):
     except: 
         return default_val
     
-if "--autostart" in sys.argv:
-    start_minimized = get_setting("start_minimized", True)
-else:
-    start_minimized = False
+# Radera if/else-blocket och skriv bara detta:
+start_minimized = get_setting("start_minimized", False)
 
 @eel.expose
 def get_current_version():
@@ -934,46 +932,113 @@ def background_auto_apply_scanner():
                         except: pass
         except Exception:
             pass
-def minimize_watcher():
-    while True:
-        time.sleep(0.2)
+
+# ==============================================================================================
+# 7. TRAY OCH FÖNSTERHANTERING FÖR NINJA-START
+# ==============================================================================================
+
+def open_tb_window():
+    """Startar Eel-fönstret (öppnas bara när användaren klickar i tray)."""
+    global is_window_open
+    if is_window_open:
+        # Om fönstret redan är öppet, ta det till förgrunden
+        hwnd = win32gui.FindWindow(None, "True Borders")
+        if hwnd != 0:
+            win32gui.ShowWindow(hwnd, 9) # SW_RESTORE
+            win32gui.SetForegroundWindow(hwnd)
+        return
+
+    is_window_open = True
+    app_width = 900 
+    app_height = 980 
+    screen_width = win32api.GetSystemMetrics(0)
+    screen_height = win32api.GetSystemMetrics(1)
+    center_x = (screen_width // 2) - (app_width // 2)
+    center_y = (screen_height // 2) - (app_height // 2)
+
+    cmd_args = [
+        '--disable-extensions', 
+        '--no-first-run', 
+        '--no-default-browser-check'
+    ]
+
+    # Starta Eel-fönstret centrerat
+    eel.start('index.html', 
+              mode='chrome', 
+              size=(app_width, app_height), 
+              position=(center_x, center_y), 
+              close_callback=on_app_close,
+              cmdline_args=cmd_args,
+              block=True # Detta blockerar tills fönstret stängs
+    )
+    # När blockeringen släpper har användaren stängt fönstret
+    is_window_open = False
+
+# ==============================================================================================
+# 8. HUVUDPROGRAM & TRAY-IKON
+# ==============================================================================================
+
+is_window_open = False # Flagga för att hålla koll på fönsterstatus
+
+def setup_tray_ninja():
+    """Skapar tray-ikonen direkt (inget fönster öppnas)."""
+    global tray_icon_instance
+    
+    # Skapa en enkel ikon
+    image = Image.new('RGB', (64, 64), color=(15, 32, 39))
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((16, 16, 48, 48), fill=(8, 217, 214), outline=(255, 46, 99), width=4)
+    
+    def on_show(icon, item):
+        # Öppnar Eel-fönstret i en ny tråd
+        threading.Thread(target=open_tb_window, daemon=True).start()
+
+    def on_quit(icon, item):
+        icon.stop()
+        # Stäng ner all borderless-logik mjukt
         try:
-            hwnd = win32gui.FindWindow(None, "True Borders")
-            if hwnd != 0 and win32gui.IsIconic(hwnd):
-                hide_to_tray()
-        except Exception:
+            set_taskbars_state(original_taskbar_autohide, False)
+            if active_taskbar_game:
+                restore_borders(active_taskbar_game['name'])
+        except: 
             pass
+        os._exit(0)
+
+    menu = pystray.Menu(
+        pystray.MenuItem("Open True Borders", on_show, default=True),
+        pystray.MenuItem("Exit Completely", on_quit)
+    )
+    
+    tray_icon_instance = pystray.Icon("TrueBordersNinja", image, "True Borders", menu)
+    threading.Thread(target=tray_icon_instance.run, daemon=True).start()
 
 def on_app_close(page, sockets):
-    try: set_taskbars_state(original_taskbar_autohide, False)
-    except: pass
-    global active_taskbar_game
-    if active_taskbar_game:
-        try: restore_borders(active_taskbar_game['name'])
-        except: pass
+    """Callback för när användaren stänger Eel-fönstret med krysset."""
+    try: 
+        set_taskbars_state(original_taskbar_autohide, False)
+        if active_taskbar_game: 
+            restore_borders(active_taskbar_game['name'])
+    except: 
+        pass
+    
+    # Detta stänger ner hela programmet direkt
     os._exit(0)
+
+# === STARTA NINJA-ARKITEKTUREN ===
 
 original_taskbar_autohide = get_taskbar_autohide_state()
 threading.Thread(target=taskbar_monitor, daemon=True).start()
-threading.Thread(target=minimize_watcher, daemon=True).start()
 threading.Thread(target=background_auto_apply_scanner, daemon=True).start()
 
-app_width = 900 
-app_height = 980 
-screen_width = win32api.GetSystemMetrics(0)
-screen_height = win32api.GetSystemMetrics(1)
-center_x = (screen_width // 2) - (app_width // 2)
-center_y = (screen_height // 2) - (app_height // 2)
+# Skapa tray-ikonen direkt
+setup_tray_ninja()
 
-eel.start('index.html', 
-          mode='chrome', 
-          size=(app_width, app_height), 
-          position=(center_x, center_y), 
-          close_callback=on_app_close,
-          cmdline_args=[
-              '--disable-extensions', 
-              '--no-first-run', 
-              '--no-default-browser-check',
-              '' if not start_minimized else '--window-position=9999,9999' 
-          ]
-)
+if start_minimized:
+    # Starta helt osynligt, bara tray-ikonen körs
+    print("Ninja-start active. Only tray icon is running.")
+    # Vi behöver hålla huvudprogrammet vid liv utan blockering
+    while True:
+        time.sleep(1)
+else:
+    # Starta fönstret direkt som vanligt
+    open_tb_window()
