@@ -64,11 +64,23 @@ if not os.path.exists(APP_DATA_DIR):
     os.makedirs(APP_DATA_DIR)
 
 PROFILES_FILE = os.path.join(APP_DATA_DIR, "profiles.json")
+SETTINGS_FILE = os.path.join(APP_DATA_DIR, "settings.json")
 REG_PATH = r"Software\Microsoft\Windows\CurrentVersion\Run"
 APP_NAME = "True Borders"
 
-start_minimized = "--autostart" in sys.argv
-
+def get_setting(key, default_val):
+    if not os.path.exists(SETTINGS_FILE): 
+        return default_val
+    try:
+        with open(SETTINGS_FILE, "r") as f:
+            return json.load(f).get(key, default_val)
+    except: 
+        return default_val
+    
+if "--autostart" in sys.argv:
+    start_minimized = get_setting("start_minimized", True)
+else:
+    start_minimized = False
 
 @eel.expose
 def get_current_version():
@@ -480,6 +492,25 @@ def get_taskbar_autohide_state():
     abd.cbSize = ctypes.sizeof(APPBARDATA)
     state = ctypes.windll.shell32.SHAppBarMessage(ABM_GETSTATE, ctypes.byref(abd))
     return (state & ABS_AUTOHIDE) != 0
+
+@eel.expose
+def toggle_start_minimized(enabled):
+    settings = {}
+    if os.path.exists(SETTINGS_FILE):
+        try:
+            with open(SETTINGS_FILE, "r") as f:
+                settings = json.load(f)
+        except: 
+            pass
+    settings["start_minimized"] = enabled
+    with open(SETTINGS_FILE, "w") as f:
+        json.dump(settings, f, indent=4)
+    return True
+
+@eel.expose
+def is_start_minimized():
+    # Returnerar True som standard ifall de inte har ändrat inställningen ännu
+    return get_setting("start_minimized", True)
 
 def set_taskbar_autohide(enable):
     ABM_SETSTATE = 0x0000000a

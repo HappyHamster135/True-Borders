@@ -1091,6 +1091,22 @@ async function handleAutostartToggle() {
     }
 }
 
+async function handleStartMinimizedToggle() {
+    const isEnabled = document.getElementById('setting-start-minimized').checked;
+    await eel.toggle_start_minimized(isEnabled)();
+
+    const statusEl = document.getElementById('status-polished');
+    if (statusEl) {
+        statusEl.innerText = isEnabled ? "Start Minimized enabled!" : "Start Minimized disabled.";
+    }
+}
+
+async function checkInitialStartMinimized() {
+    const isEnabled = await eel.is_start_minimized()();
+    const checkbox = document.getElementById('setting-start-minimized');
+    if (checkbox) checkbox.checked = isEnabled;
+}
+
 async function checkInitialAutostart() {
     const isEnabled = await eel.is_autostart_enabled()();
     const checkbox = document.getElementById('setting-autostart');
@@ -1463,6 +1479,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadGlobalSettings();
     updateLatencyBoostUI();
     checkInitialAutostart();
+    checkInitialStartMinimized();
 
     // FILTER-LOGIK för Profiles-listan
     document.getElementById('profile-search').addEventListener('input', (e) => {

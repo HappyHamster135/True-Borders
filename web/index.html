@@ -230,7 +230,7 @@
                             style="max-width: 400px; margin: 0 auto; display: flex; flex-direction: column; gap: 15px;">
 
                             <div class="setting-row"
-                                style="padding: 15px; border: 1px solid var(--bg-panel); border-radius: 8px; display: flex; justify-content: space-between; align-items: center; margin: 0;">
+                                style="padding: 15px; border: 1px solid var(--bg-panel); border-radius: 8px; display: flex; justify-content: space-between; align-items: center; margin: 0; margin-bottom: 10px;">
                                 <span
                                     style="font-weight: bold; color: var(--accent-1); font-family: var(--font-body);">Run
                                     on Startup</span>
@@ -240,6 +240,17 @@
                                 </label>
                             </div>
 
+                            <div class="setting-row"
+                                style="padding: 15px; border: 1px solid var(--bg-panel); border-radius: 8px; display: flex; justify-content: space-between; align-items: center; margin: 0;">
+                                <span
+                                    style="font-weight: bold; color: var(--accent-1); font-family: var(--font-body);">Start
+                                    Minimized (To Tray)</span>
+                                <label class="neon-switch">
+                                    <input type="checkbox" id="setting-start-minimized"
+                                        onchange="handleStartMinimizedToggle()">
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
                             <div class="setting-row"
                                 style="padding: 15px; border: 1px solid var(--bg-panel); border-radius: 8px; display: flex; justify-content: space-between; align-items: center; margin: 0;">
                                 <span class="has-tooltip" data-tooltip="Save or load your settings"
