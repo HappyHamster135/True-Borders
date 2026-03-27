@@ -30,7 +30,7 @@ import urllib.request
 # ==============================================================================================
 
 # Sätt din nuvarande version här
-CURRENT_VERSION = "1.0.3" 
+CURRENT_VERSION = "1.0.4" 
 # URL till en JSON-fil som du lägger på t.ex. GitHub (Raw länk)
 UPDATE_INFO_URL = "https://raw.githubusercontent.com/HappyHamster135/True-Borders/main/update.json"
 
@@ -236,39 +236,84 @@ def is_game_running(title):
 @eel.expose
 def is_borderless(window_title):
     global active_taskbar_game
+    
+    # 1. Är det VI som aktivt hanterar spelet just nu? Då säger vi Ja!
     if active_taskbar_game and active_taskbar_game.get('name') == window_title:
         return True
+        
+    # 2. Har spelet en sparad profil, men vi har INTE tagit över det ännu?
+    # Vi returnerar False för att tvinga Auto-Apply att vakna, ta över rutan 
+    # och uppdatera Visual Map!
+    if get_profile(window_title):
+        return False
+        
+    # 3. För alla andra rutor (som saknar profil), gör den vanliga kollen
     hwnd = find_real_game_window(window_title)
     if hwnd != 0:
         style = win32gui.GetWindowLong(hwnd, GWL_STYLE)
         return not (style & WS_CAPTION)
+        
     return False
 
+def get_window_offsets(hwnd):
+    """Räknar ut exakt hur tjock den vita baren och sidokanterna är."""
+    try:
+        rect = win32gui.GetWindowRect(hwnd)
+        client_rect = win32gui.GetClientRect(hwnd)
+        
+        win_w = rect[2] - rect[0]
+        win_h = rect[3] - rect[1]
+        
+        # Client rect börjar alltid på 0,0 så vi tar bara bredd och höjd
+        client_w = client_rect[2] 
+        client_h = client_rect[3] 
+        
+        # Sidokanten (oftast 8 pixlar)
+        border_x = (win_w - client_w) // 2
+        
+        # Vita baren i toppen (oftast runt 31 pixlar)
+        border_top = (win_h - client_h) - border_x
+        
+        return max(0, border_x), max(0, border_top)
+    except Exception:
+        return 0, 0
+    
 @eel.expose
 def init_borderless(window_title):
     hwnd = find_real_game_window(window_title)
     if hwnd == 0:
         return False
-    
-    # Tvinga fönstret att acceptera ändringar
-    win32gui.SendMessage(hwnd, win32con.WM_SETREDRAW, True, 0)
-    
+        
+    profile = get_profile(window_title)
     rect = win32gui.GetWindowRect(hwnd)
-    x, y, w, h = rect[0], rect[1], rect[2] - rect[0], rect[3] - rect[1]
+    
+    target_x = profile.get('realX', rect[0]) if profile else rect[0]
+    target_y = profile.get('realY', rect[1]) if profile else rect[1]
+    target_w = profile.get('resW', rect[2] - rect[0]) if profile else (rect[2] - rect[0])
+    target_h = profile.get('resH', rect[3] - rect[1]) if profile else (rect[3] - rect[1])
 
-    # Hammra in stilen
-    for _ in range(3):
-        style = win32gui.GetWindowLong(hwnd, GWL_STYLE)
-        new_style = style & ~(WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU)
-        win32gui.SetWindowLong(hwnd, GWL_STYLE, new_style)
-        win32gui.SetWindowPos(hwnd, 0, x, y, w + 1, h + 1, SWP_FRAMECHANGED | SWP_NOZORDER)
-        win32gui.SetWindowPos(hwnd, 0, x, y, w, h, SWP_FRAMECHANGED | SWP_NOZORDER)
-        time.sleep(0.05)
+    style = win32gui.GetWindowLong(hwnd, GWL_STYLE)
+    
+    # Kollar om fönstret har den vita baren just nu
+    if style & win32con.WS_CAPTION:
+        border_x, border_top = get_window_offsets(hwnd)
+        
+        # --- DIN LÖSNING: Skjut baren utanför skärmen ---
+        final_x = target_x - border_x
+        final_y = target_y - border_top
+        final_w = target_w + (border_x * 2)
+        final_h = target_h + border_top + border_x
+        
+        flags = 0x0004 | 0x0010 | 0x4000
+        win32gui.SetWindowPos(hwnd, 0, int(final_x), int(final_y), int(final_w), int(final_h), flags)
+    else:
+        # Om det saknar bar, flytta bara normalt
+        flags = 0x0004 | 0x0010 | 0x4000
+        win32gui.SetWindowPos(hwnd, 0, int(target_x), int(target_y), int(target_w), int(target_h), flags)
 
     global active_taskbar_game
-    profile = get_profile(window_title)
     
-    # --- FIXEN: LÄR SIG SÖKVÄGEN AUTOMATISKT FÖR BEFINTLIGA PROFILER ---
+    # -- DIN BEFINTLIGA EXE-LEARNING BEHÅLLS HÄR --
     try:
         _, pid = win32process.GetWindowThreadProcessId(hwnd)
         h_process = ctypes.windll.kernel32.OpenProcess(0x1000, False, pid)
@@ -277,7 +322,6 @@ def init_borderless(window_title):
             size = ctypes.wintypes.DWORD(260)
             if ctypes.windll.kernel32.QueryFullProcessImageNameW(h_process, 0, exe_buffer, ctypes.byref(size)):
                 exe_path = exe_buffer.value
-                # Om profilen redan finns men saknar exePath, uppdatera filen direkt i bakgrunden!
                 if profile and not profile.get('exePath'):
                     profile['exePath'] = exe_path
                     profiles = get_all_profiles()
@@ -287,17 +331,16 @@ def init_borderless(window_title):
             ctypes.windll.kernel32.CloseHandle(h_process)
     except Exception as e:
         print(f"Kunde inte auto-lära sökväg: {e}")
-    # ---------------------------------------------------------------------
 
     if profile:
         active_taskbar_game = {
             'name': window_title, 
             'hide': profile.get('hideTaskbar', False), 
             'disable': profile.get('disableTaskbar', False),
-            'realX': profile.get('realX', x),
-            'realY': profile.get('realY', y),
-            'resW': profile.get('resW', w),
-            'resH': profile.get('resH', h)
+            'realX': target_x,
+            'realY': target_y,
+            'resW': target_w,
+            'resH': target_h
         }
     else:
         active_taskbar_game = {'name': window_title, 'hide': False, 'disable': False}
@@ -339,6 +382,7 @@ def toggle_borderless(window_title):
 @eel.expose
 def update_window_pos(window_title, x, y, w, h):
     if x is None or y is None: return 
+    
     global active_taskbar_game
     if active_taskbar_game and active_taskbar_game.get('name') == window_title:
         active_taskbar_game['realX'] = int(x)
@@ -348,8 +392,23 @@ def update_window_pos(window_title, x, y, w, h):
 
     hwnd = find_real_game_window(window_title)
     if hwnd != 0:
-        flags = 0x0004 | 0x0010 | 0x4000 
-        win32gui.SetWindowPos(hwnd, 0, int(x), int(y), int(w), int(h), flags)
+        final_x, final_y, final_w, final_h = int(x), int(y), int(w), int(h)
+        style = win32gui.GetWindowLong(hwnd, GWL_STYLE)
+        
+        # Om den vita baren är framme, applicera din "skjut upp"-metod!
+        if style & win32con.WS_CAPTION:
+            border_x, border_top = get_window_offsets(hwnd)
+            
+            # Förskjut fönstret uppåt och åt vänster
+            final_x = final_x - border_x
+            final_y = final_y - border_top
+            
+            # Lägg till kanterna i totalstorleken så att själva ritytan inuti förblir rätt
+            final_w = final_w + (border_x * 2)
+            final_h = final_h + border_top + border_x
+            
+        flags = 0x0004 | 0x0010 | 0x4000 # Din laggfria flagga!
+        win32gui.SetWindowPos(hwnd, 0, final_x, final_y, final_w, final_h, flags)
 
 def force_reapply_borderless(hwnd, x, y, w, h):
     style = win32gui.GetWindowLong(hwnd, GWL_STYLE)
