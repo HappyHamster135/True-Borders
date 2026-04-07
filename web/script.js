@@ -118,42 +118,76 @@ async function initMap() {
         if (!gameName || gameName === "Select a game...") {
             isCurrentlyBorderlessSession = false;
             triggerText.innerHTML = "Select a game...";
+            // Återställ knappen om man avmarkerar ett spel
+            document.getElementById('btnApply').innerText = "APPLY BORDERLESS";
             return;
         }
 
-        // Uppdatera visuell text direkt
+        // Uppdatera visuell text och ikon
         const iconBase64 = await eel.get_window_icon_base64(gameName)();
         let iconHtml = iconBase64 ? `<img src="${iconBase64}" class="window-icon">` : `<div style="width:18px; height:18px; margin-right:8px;"></div>`;
         triggerText.innerHTML = `${iconHtml} <span>${gameName}</span>`;
 
         localStorage.setItem('windowName', gameName);
+
+        // Hämtar profilen
         const profile = await eel.get_profile(gameName)();
+
+        // --- FIXEN: Skottsäker check ---
+        const btnApply = document.getElementById('btnApply');
+
+        // Vi kollar inte bara om profilen finns, vi kollar om den faktiskt har en sparad bredd (resW)!
+        if (profile && profile.resW !== undefined) {
+            btnApply.innerText = "SAVE TO PROFILE";
+        } else {
+            btnApply.innerText = "APPLY BORDERLESS";
+        }
+        // --------------------------------
+
         const isAlreadyBorderless = await eel.is_borderless(gameName)();
         isCurrentlyBorderlessSession = isAlreadyBorderless;
 
-        if (profile) {
-            document.getElementById('resW').value = profile.resW;
-            document.getElementById('resH').value = profile.resH;
+        // --- FIXEN: Läs av verkligheten! ---
+        // Fråga Python exakt var fönstret befinner sig just nu
+        const actualPos = await eel.get_actual_window_pos(gameName)();
 
-            // Uppdatera Size Preset-menyn
-            let presetVal = `${profile.resW}x${profile.resH}`;
+        if (profile || actualPos) {
+            // Använd den faktiska bredden/höjden om spelet är igång, annars fall tillbaka på profilen
+            let useW = (profile && profile.resW) ? profile.resW : (actualPos ? actualPos.w : 1920);
+            let useH = (profile && profile.resH) ? profile.resH : (actualPos ? actualPos.h : 1080);
+
+            document.getElementById('resW').value = useW;
+            document.getElementById('resH').value = useH;
+
+            let presetVal = `${useW}x${useH}`;
             let optionExists = document.querySelector(`#preset-options .custom-option[data-value="${presetVal}"]`);
-            if (typeof setPresetValue === "function") {
-                setPresetValue(optionExists ? presetVal : 'custom');
-            }
+            if (typeof setPresetValue === "function") setPresetValue(optionExists ? presetVal : 'custom');
 
-            updateDragBoxSize();
+            // Vart är rutan rent fysiskt just nu? (Litar på actualPos i första hand)
+            let posX = (profile && profile.realX !== undefined) ? profile.realX : (actualPos ? actualPos.x : 0);
+            let posY = (profile && profile.realY !== undefined) ? profile.realY : (actualPos ? actualPos.y : 0);
 
-            if (profile.realX !== undefined && profile.realY !== undefined) {
-                const newUIX = (profile.realX - minRealX) * globalScale + offsetX;
-                const newUIY = (profile.realY - minRealY) * globalScale + offsetY;
-                const dBox = document.getElementById('drag-box');
+            const dBox = document.getElementById('drag-box');
+            if (posX !== undefined && posY !== undefined && dBox) {
+                // Sätt positionen FÖRST...
+                const newUIX = (posX - minRealX) * globalScale + offsetX;
+                const newUIY = (posY - minRealY) * globalScale + offsetY;
                 dBox.style.left = newUIX + "px";
                 dBox.style.top = newUIY + "px";
-                triggerRealTimeMove(dBox, newUIY, newUIX);
             }
-            document.getElementById('status-polished').innerText = `Profile loaded: ${gameName}`;
-            document.getElementById('status-polished').style.color = "var(--accent-1)";
+
+            // ...och räkna ut storleken SEDAN!
+            updateDragBoxSize();
+
+            // VIKTIGT: Jag har tagit bort "triggerRealTimeMove" härifrån.
+            // Tidigare tvingade UI:t fönstret att hoppa när det laddades in. 
+            // Nu "speglar" UI:t bara verkligheten istället.
+
+            const statusEl = document.getElementById('status-polished');
+            if (statusEl) {
+                statusEl.innerText = `Profile loaded: ${gameName}`;
+                statusEl.style.color = "var(--accent-1)";
+            }
         }
     });
 
@@ -185,9 +219,7 @@ async function initMap() {
 
         inputEl.addEventListener('change', () => {
             updateDragBoxSize();
-            if (typeof isCurrentlyBorderlessSession !== 'undefined' && isCurrentlyBorderlessSession) {
-                if (typeof autoSaveCurrentState === "function") autoSaveCurrentState();
-            }
+
         });
 
         inputEl.addEventListener('wheel', function (e) {
@@ -204,20 +236,40 @@ async function initMap() {
         });
     });
 
-    // --- E. KNAPPAR (Apply / Restore) ---
     document.getElementById('btnApply').addEventListener('click', async () => {
         const windowName = document.getElementById('window_title_input').value;
         if (!windowName || windowName === "Select a game...") return;
 
-        let success = await eel.init_borderless(windowName)();
-        if (success) {
-            isCurrentlyBorderlessSession = true;
-            triggerRealTimeMove(document.getElementById('drag-box'));
-            const profile = await eel.get_profile(windowName)();
-            if (profile) {
-                await autoSaveCurrentState();
-                document.getElementById('status-polished').innerText = "Applied & Profile Updated!";
-            } else {
+        const profile = await eel.get_profile(windowName)();
+
+        // Samma skottsäkra check här!
+        if (profile && profile.resW !== undefined) {
+            // --- SCENARIO 1: PROFILEN FINNS ---
+            await autoSaveCurrentState();
+            let success = await eel.init_borderless(windowName)();
+            if (success) {
+                isCurrentlyBorderlessSession = true;
+                const statusEl = document.getElementById('status-polished');
+                if (statusEl) {
+                    statusEl.innerText = "Saved & Applied!";
+                    statusEl.style.color = "var(--accent-1)";
+                }
+            }
+        } else {
+            // --- SCENARIO 2: NYTT SPEL (Skicka UI-värden direkt till Python!) ---
+            const dragBox = document.getElementById('drag-box');
+
+            // Räkna ut exakt var den gröna rutan är just nu
+            let posX = Math.round(((parseFloat(dragBox.style.left) - offsetX) / globalScale) + minRealX);
+            let posY = Math.round(((parseFloat(dragBox.style.top) - offsetY) / globalScale) + minRealY);
+            let safeW = parseInt(document.getElementById('resW').value) || 1920;
+            let safeH = parseInt(document.getElementById('resH').value) || 1080;
+
+            // Skicka in dem i init_borderless så Python inte behöver gissa!
+            let success = await eel.init_borderless(windowName, posX, posY, safeW, safeH)();
+
+            if (success) {
+                isCurrentlyBorderlessSession = true;
                 document.getElementById('prompt-game-name').innerText = windowName;
                 document.getElementById('save-prompt-modal').style.display = "block";
             }
@@ -289,7 +341,29 @@ async function initMap() {
     setInterval(autoApplyScanner, 2000);
 }
 
+async function selectGameInVisualMap(winName) {
+    const hiddenInput = document.getElementById('window_title_input');
+    const triggerText = document.getElementById('custom-select-text');
 
+    if (!hiddenInput || !triggerText || !winName) return;
+
+    // Om spelet redan är valt, gör ingenting
+    if (hiddenInput.value === winName) return;
+
+    // Uppdatera det dolda värdet
+    hiddenInput.value = winName;
+    localStorage.setItem('windowName', winName);
+
+    // Hämta och uppdatera ikonen + texten i dropdownen
+    const iconBase64 = await eel.get_window_icon_base64(winName)();
+    let iconHtml = iconBase64 ? `<img src="${iconBase64}" class="window-icon">` : `<div style="width:18px; height:18px; margin-right:8px;"></div>`;
+    triggerText.innerHTML = `${iconHtml} <span>${winName}</span>`;
+
+    // Tvinga Visual Map att rita om sig och ladda profilen
+    hiddenInput.dispatchEvent(new Event('change'));
+
+    console.log("Visual Map auto-selected:", winName);
+}
 // ==========================================================================
 //  3. VISUAL MAP LOGIK (Flytta, Storlek, D-Pad, Snaps)
 // ==========================================================================
@@ -301,14 +375,14 @@ async function autoSaveCurrentState() {
 
     let safeW = Math.max(200, parseInt(document.getElementById('resW').value) || 200);
     let safeH = Math.max(200, parseInt(document.getElementById('resH').value) || 200);
-    safeW = Math.min(safeW, realMonitorW);
-    safeH = Math.min(safeH, realMonitorH);
 
+    // Använder parseFloat för att få exakta decimaler innan vi avrundar, 
+    // detta förhindrar att den "missar" 1 pixel när du nudgar!
     const profileData = {
         resW: safeW,
         resH: safeH,
-        realX: Math.round(((dragBox.offsetLeft - offsetX) / globalScale) + minRealX),
-        realY: Math.round(((dragBox.offsetTop - offsetY) / globalScale) + minRealY)
+        realX: Math.round(((parseFloat(dragBox.style.left) - offsetX) / globalScale) + minRealX),
+        realY: Math.round(((parseFloat(dragBox.style.top) - offsetY) / globalScale) + minRealY)
     };
 
     await eel.save_profile(windowName, profileData)();
@@ -437,14 +511,7 @@ function makeDraggable(elmnt) {
 
         // Auto-save när du släpper musen!
         const windowName = document.getElementById('window_title_input').value;
-        if (isCurrentlyBorderlessSession) {
-            const profileExists = await eel.get_profile(windowName)();
-            if (profileExists) {
-                await autoSaveCurrentState();
-                document.getElementById('status-polished').innerText = "Position auto-saved!";
-                document.getElementById('status-polished').style.color = "var(--accent-1)";
-            }
-        }
+
     }
 }
 
@@ -704,7 +771,7 @@ async function loadProfilesTab() {
                 
                 <button class="icon-btn" onclick="editProfile('${name}')" title="Profile Settings">⚙️</button>
                 <label class="neon-switch">
-                    <input type="checkbox" onchange="handleToggle(event, '${name}')" ${checkedState}>
+                    <input type="checkbox" id="toggle-${name}" onchange="handleToggle(event, '${name}')" ${checkedState}>
                     <span class="slider"></span>
                 </label>
             </div>
@@ -816,6 +883,8 @@ async function deleteCurrentProfile() {
         if (success) {
             closeModal();
             if (typeof loadProfilesTab === "function") loadProfilesTab();
+            // Tvingar UI:t att ladda om och uppdatera knappens text!
+            document.getElementById('window_title_input').dispatchEvent(new Event('change'));
         } else {
             alert("Failed to delete profile. Please check the console.");
         }
@@ -1304,6 +1373,7 @@ async function handleSavePrompt(shouldSave) {
 
         await eel.save_profile(gameName, data)();
         console.log("Profile saved:", gameName);
+        document.getElementById('window_title_input').dispatchEvent(new Event('change'));
     }
 
     modal.classList.add('closing');
@@ -1339,39 +1409,52 @@ window.onclick = function (event) {
 async function autoApplyScanner() {
     const profiles = await eel.get_all_profiles()();
     const openWindows = await eel.get_open_windows()();
+    const hiddenInput = document.getElementById('window_title_input');
 
+    // 1. Kollar om spel har stängts
     for (let game of knownRunningGames) {
         if (!openWindows.includes(game)) {
             knownRunningGames.delete(game);
             manuallyRestoredGames.delete(game);
+
+            // --- FIXEN: Slå AV knappen om spelet stängs! ---
+            const toggleBtn = document.getElementById(`toggle-${game}`);
+            if (toggleBtn) toggleBtn.checked = false;
         }
     }
 
     for (const win of openWindows) {
         if (profiles[win]) {
+            if (!hiddenInput.value || hiddenInput.value === "" || hiddenInput.value === "Select a game...") {
+                await selectGameInVisualMap(win);
+            }
+
             if (!knownRunningGames.has(win) && !manuallyRestoredGames.has(win)) {
                 knownRunningGames.add(win);
 
                 const isBorderless = await eel.is_borderless(win)();
                 if (!isBorderless) {
                     await eel.init_borderless(win)();
+                    await selectGameInVisualMap(win);
+
                     const p = profiles[win];
-                    if (p) {
-                        await eel.update_window_pos(win, p.realX, p.realY, p.resW, p.resH)();
-                        if (p.alwaysOnTop) {
-                            await eel.set_game_topmost(win, true)();
-                        }
+                    if (p && p.alwaysOnTop) {
+                        await eel.set_game_topmost(win, true)();
                     }
 
-                    document.getElementById('window_title_input').value = win;
-                    document.getElementById('window_title_input').dispatchEvent(new Event('change'));
+                    // --- FIXEN: Slå PÅ knappen när spelet startas! ---
+                    const toggleBtn = document.getElementById(`toggle-${win}`);
+                    if (toggleBtn) toggleBtn.checked = true;
 
-                    if (document.getElementById('profiles-tab').style.display === 'block') {
-                        loadProfilesTab();
+                    const statusEl = document.getElementById('status-polished');
+                    if (statusEl) {
+                        statusEl.innerText = `Auto-applied: ${win}`;
+                        statusEl.style.color = "var(--accent-1)";
                     }
-
-                    document.getElementById('status-polished').innerText = `Auto-applied: ${win}`;
-                    document.getElementById('status-polished').style.color = "var(--accent-1)";
+                } else {
+                    // Om det REDAN var borderless när appen upptäcker det, se till att knappen lyser
+                    const toggleBtn = document.getElementById(`toggle-${win}`);
+                    if (toggleBtn) toggleBtn.checked = true;
                 }
             }
         }
