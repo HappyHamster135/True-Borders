@@ -65,6 +65,17 @@ def start_update(download_url, target_exe):
     root.mainloop()
 
 if __name__ == "__main__":
-    # Tar emot URL och Sökväg som argument
-    if len(sys.argv) > 2:
-        start_update(sys.argv[1], sys.argv[2])
+    import sys
+    # sys.argv[0] är själva updater.exe
+    # sys.argv[1] bör vara download_url
+    # sys.argv[2] bör vara target_exe (True Borders.exe)
+    if len(sys.argv) >= 3:
+        url = sys.argv[1]
+        target = sys.argv[2]
+        start_update(url, target)
+    else:
+        # Om den startas utan argument, visa ett felmeddelande istället för att bara vara tom
+        root = tk.Tk()
+        root.withdraw()
+        tk.messagebox.showerror("Updater Error", "Inga argument mottagna. Starta uppdateringen inifrån True Borders.")
+        sys.exit(1)

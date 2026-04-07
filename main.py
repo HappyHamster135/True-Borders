@@ -30,7 +30,7 @@ import urllib.request
 # ==============================================================================================
 
 # Sätt din nuvarande version här
-CURRENT_VERSION = "1.0.5" 
+CURRENT_VERSION = "1.0.6" 
 # URL till en JSON-fil som du lägger på t.ex. GitHub (Raw länk)
 UPDATE_INFO_URL = "https://raw.githubusercontent.com/HappyHamster135/True-Borders/main/update.json"
 
@@ -841,27 +841,30 @@ update_triggered = False
 
 @eel.expose
 def perform_update(download_url):
-    global update_triggered
-    if update_triggered: return False # Starta inte två!
-    update_triggered = True
-    
     try:
         current_exe = sys.executable
+        
         if getattr(sys, 'frozen', False):
+            # VIKTIGT: Här letar vi inuti den packade .exe-filen
             base_path = sys._MEIPASS
             updater_path = os.path.join(base_path, "updater.exe")
         else:
-            updater_path = "updater.exe"
+            updater_path = os.path.join(os.path.dirname(__file__), "updater.exe")
 
-        # Starta updatern med DETACHED_PROCESS så den lever sitt eget liv
+        # Kontrollera om updatern faktiskt finns där vi tror
+        if not os.path.exists(updater_path):
+            print(f"FEL: Hittade inte updater på {updater_path}")
+            return False
+
+        # Starta updatern med citattecken runt argumenten ifall det finns mellanslag i sökvägar
         subprocess.Popen([updater_path, download_url, current_exe], 
-                         creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP)
+                         creationflags=subprocess.CREATE_NEW_CONSOLE | subprocess.DETACHED_PROCESS)
         
-        # Stäng ner oss själva SNABBT
-        os._exit(0) 
+        # Ge den en liten stund att starta innan vi dödar oss själva
+        threading.Timer(1.0, lambda: os._exit(0)).start()
         return True
     except Exception as e:
-        update_triggered = False
+        print(f"Kunde inte starta updater: {e}")
         return False
     
 @eel.expose
