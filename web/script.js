@@ -1520,29 +1520,32 @@ async function loadAppVersion() {
 
 async function manualUpdateCheck() {
     const btn = event.target;
+    if (btn.disabled) return;
+
     const originalText = btn.innerText;
     btn.innerText = "Söker...";
     btn.disabled = true;
 
     try {
+        // 1. Kolla om det finns en uppdatering
         let result = await eel.check_for_updates()();
 
         if (result.update_available) {
-            if (confirm(`En ny version (v${result.version}) hittades!\n\nVill du ladda ner och installera den nu? Programmet kommer att startas om.`)) {
-                btn.innerText = "Laddar ner...";
-                // ÄNDRA DETTA:
-                let success = await eel.perform_update(result.url)();
-                if (success === true) {
-                    window.close();
-                }
+            const msg = `En ny version (v${result.version}) hittades!\n\nVill du ladda ner och installera den nu? Ett separat fönster kommer visa förloppet.`;
 
-                // TILL DETTA (Vi litar på att den startar):
-                eel.perform_update(result.url)(); // Vi väntar INTE på await här
+            if (confirm(msg)) {
+                btn.innerText = "Startar...";
+
+                // 2. Starta Python-funktionen (vi väntar INTE med await)
+                eel.perform_update(result.url)();
+
+                // 3. Stäng ner UI:t efter 1 sekund så Python hinner döda processen
                 setTimeout(() => {
-                    window.close(); // Stäng UI:t efter en sekund så Python får jobba ifred
+                    window.close();
                 }, 1000);
+
             } else {
-                alert("Ett fel uppstod vid uppdateringen...");
+                // Användaren klickade avbryt
                 btn.innerText = originalText;
                 btn.disabled = false;
             }
@@ -1552,6 +1555,7 @@ async function manualUpdateCheck() {
             btn.disabled = false;
         }
     } catch (err) {
+        console.error(err);
         alert("Kunde inte söka efter uppdateringar. Kolla din internetuppkoppling.");
         btn.innerText = originalText;
         btn.disabled = false;

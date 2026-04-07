@@ -21,14 +21,18 @@ def start_update(download_url, target_exe):
 
     def run():
         try:
-            # 1. Vänta på att huvudprocessen ska dö helt
-            time.sleep(2)
+            # 1. Tvinga ner den gamla appen ifall den inte stängt sig själv
+            exe_name = os.path.basename(target_exe)
+            os.system(f'taskkill /F /IM "{exe_name}" /T >nul 2>&1')
+            time.sleep(2) # Ge Windows tid att släppa fil-låset
             
-            # 2. Ladda ner till en temp-fil
             ctx = ssl._create_unverified_context()
             temp_file = target_exe + ".new"
             
-            with urllib.request.urlopen(download_url, context=ctx) as response:
+            # 2. Ladda ner
+            req = urllib.request.Request(download_url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, context=ctx) as response:
+                # Resten av din nerladdningskod här...
                 total_size = int(response.info().get('Content-Length', 0))
                 downloaded = 0
                 with open(temp_file, 'wb') as f:

@@ -837,27 +837,31 @@ def check_for_updates():
         
     return {"update_available": False}
 
+update_triggered = False
+
 @eel.expose
 def perform_update(download_url):
+    global update_triggered
+    if update_triggered: return False # Starta inte två!
+    update_triggered = True
+    
     try:
         current_exe = sys.executable
-        # Hitta updater.exe (som vi packar med i huvud-exen)
         if getattr(sys, 'frozen', False):
-            # Om vi kör som EXE, ligger updater.exe i samma mapp som temporära filer
             base_path = sys._MEIPASS
             updater_path = os.path.join(base_path, "updater.exe")
         else:
             updater_path = "updater.exe"
 
-        # Starta den externa updatern och skicka med info
-        # Vi använder "" runt sökvägar ifall de innehåller mellanslag
-        subprocess.Popen([updater_path, download_url, current_exe])
+        # Starta updatern med DETACHED_PROCESS så den lever sitt eget liv
+        subprocess.Popen([updater_path, download_url, current_exe], 
+                         creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP)
         
-        # Stäng ner huvudappen direkt
-        threading.Timer(0.5, lambda: os._exit(0)).start()
+        # Stäng ner oss själva SNABBT
+        os._exit(0) 
         return True
     except Exception as e:
-        print(f"Kunde inte starta updater: {e}")
+        update_triggered = False
         return False
     
 @eel.expose
