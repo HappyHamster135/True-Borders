@@ -1530,11 +1530,17 @@ async function manualUpdateCheck() {
         if (result.update_available) {
             if (confirm(`En ny version (v${result.version}) hittades!\n\nVill du ladda ner och installera den nu? Programmet kommer att startas om.`)) {
                 btn.innerText = "Laddar ner...";
+                // ÄNDRA DETTA:
                 let success = await eel.perform_update(result.url)();
                 if (success === true) {
-                    // Stäng ner fönstret! Detta låter Python stänga mjukt.
                     window.close();
                 }
+
+                // TILL DETTA (Vi litar på att den startar):
+                eel.perform_update(result.url)(); // Vi väntar INTE på await här
+                setTimeout(() => {
+                    window.close(); // Stäng UI:t efter en sekund så Python får jobba ifred
+                }, 1000);
             } else {
                 alert("Ett fel uppstod vid uppdateringen...");
                 btn.innerText = originalText;

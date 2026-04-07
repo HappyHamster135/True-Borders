@@ -839,79 +839,25 @@ def check_for_updates():
 
 @eel.expose
 def perform_update(download_url):
-    """Debug-version av Auto-updatern som visar exakt vad som händer."""
     try:
-        if not getattr(sys, 'frozen', False):
-            print("Körs inte som en kompilerad .exe.")
-            return False
-
         current_exe = sys.executable
-        exe_dir = os.path.dirname(current_exe)
+        # Hitta updater.exe (som vi packar med i huvud-exen)
+        if getattr(sys, 'frozen', False):
+            # Om vi kör som EXE, ligger updater.exe i samma mapp som temporära filer
+            base_path = sys._MEIPASS
+            updater_path = os.path.join(base_path, "updater.exe")
+        else:
+            updater_path = "updater.exe"
+
+        # Starta den externa updatern och skicka med info
+        # Vi använder "" runt sökvägar ifall de innehåller mellanslag
+        subprocess.Popen([updater_path, download_url, current_exe])
         
-        temp_dir = os.environ.get('TEMP', exe_dir)
-        new_exe_path = os.path.join(temp_dir, "TrueBorders_New.exe")
-        bat_path = os.path.join(temp_dir, "update_tb.bat")
-
-        # --- LÄGGER TILL CACHE-BUSTING ---
-        # Tvingar datorn att ladda ner en helt ny fil från GitHub och inte använda minnet
-        import time
-        safe_url = f"{download_url}?t={int(time.time())}"
-        urllib.request.urlretrieve(safe_url, new_exe_path)
-
-        if os.path.getsize(new_exe_path) < 1000000:
-            return False
-
-        # --- SYNLIGT BAT-SKRIPT ---
-        bat_content = f"""@echo off
-title True Borders Auto-Updater
-color 0B
-echo ==============================================
-echo STARTAR UPPFATERING AV TRUE BORDERS
-echo ==============================================
-echo.
-echo 1. Vantar 4 sekunder pa att programmet ska stanga ner...
-ping 127.0.0.1 -n 5 > nul
-
-echo.
-echo 2. Forsoker skriva over den gamla filen...
-copy /Y "{new_exe_path}" "{current_exe}"
-if errorlevel 1 (
-    color 0C
-    echo.
-    echo [FEL!] Kunde inte skriva over filen!
-    echo Detta beror formodligen pa att True Borders fortfarande ar igang.
-    echo Ligger det kvar en gron ikon nere i System Tray vid klockan?
-    pause
-    exit
-)
-
-echo.
-echo [SUCCE!] Filen ar utbytt.
-echo 3. Startar nya True Borders...
-explorer.exe "{current_exe}"
-
-echo.
-echo ==============================================
-echo UPPDRAG SLUTFORTH! (Pausar sa du hinner lasa)
-echo ==============================================
-pause
-
-echo.
-echo 4. Stadar upp...
-del "{new_exe_path}"
-(goto) 2>nul ^& del "%~f0"
-"""
-        with open(bat_path, "w", encoding="utf-8") as bat_file:
-            bat_file.write(bat_content)
-
-        # Vi plockar bort "CREATE_NO_WINDOW" så att fönstret faktiskt poppar upp!
-        # Använder CREATE_NEW_CONSOLE för att tvinga fram det.
-        subprocess.Popen([bat_path], creationflags=subprocess.CREATE_NEW_CONSOLE)
-        
+        # Stäng ner huvudappen direkt
+        threading.Timer(0.5, lambda: os._exit(0)).start()
         return True
-        
     except Exception as e:
-        print(f"Kunde inte genomföra uppdateringen: {e}")
+        print(f"Kunde inte starta updater: {e}")
         return False
     
 @eel.expose

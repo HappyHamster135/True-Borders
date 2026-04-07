@@ -5,7 +5,7 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[('web', 'web')],
+    datas=[('web', 'web'), ('updater.exe', '.')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
