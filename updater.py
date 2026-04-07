@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import ttk
+from tkinter import messagebox
 import urllib.request
 import os
 import sys
@@ -58,7 +59,7 @@ def start_update(download_url, target_exe):
             os._exit(0)
             
         except Exception as e:
-            tk.messagebox.showerror("Update Error", str(e))
+            messagebox.showerror("Update Error", str(e))
             os._exit(1)
 
     root.after(100, run)
@@ -74,8 +75,9 @@ if __name__ == "__main__":
         target = sys.argv[2]
         start_update(url, target)
     else:
-        # Om den startas utan argument, visa ett felmeddelande istället för att bara vara tom
+        # Skapa en tillfällig root för att kunna visa rutan
         root = tk.Tk()
         root.withdraw()
-        tk.messagebox.showerror("Updater Error", "Inga argument mottagna. Starta uppdateringen inifrån True Borders.")
+        messagebox.showerror("Updater Error", "Inga argument mottagna. Starta uppdateringen inifrån True Borders.")
+        root.destroy()
         sys.exit(1)

@@ -844,27 +844,31 @@ def perform_update(download_url):
     try:
         current_exe = sys.executable
         
+        # Hitta rätt sökväg inuti den packade EXE-filen
         if getattr(sys, 'frozen', False):
-            # VIKTIGT: Här letar vi inuti den packade .exe-filen
             base_path = sys._MEIPASS
             updater_path = os.path.join(base_path, "updater.exe")
         else:
             updater_path = os.path.join(os.path.dirname(__file__), "updater.exe")
 
-        # Kontrollera om updatern faktiskt finns där vi tror
+        # FELSÖKNING: Visa en ruta om filen saknas inuti paketet
         if not os.path.exists(updater_path):
-            print(f"FEL: Hittade inte updater på {updater_path}")
+            ctypes.windll.user32.MessageBoxW(0, f"Hittade inte updater.exe på: {updater_path}", "Fel", 0x10)
             return False
 
-        # Starta updatern med citattecken runt argumenten ifall det finns mellanslag i sökvägar
-        subprocess.Popen([updater_path, download_url, current_exe], 
-                         creationflags=subprocess.CREATE_NEW_CONSOLE | subprocess.DETACHED_PROCESS)
+        # Starta updatern med fullständig miljö
+        # Vi använder shell=False för att undvika att Windows blockerar det som ett skript
+        subprocess.Popen(
+            [updater_path, download_url, current_exe],
+            creationflags=subprocess.CREATE_NEW_CONSOLE | subprocess.DETACHED_PROCESS,
+            shell=False 
+        )
         
-        # Ge den en liten stund att starta innan vi dödar oss själva
-        threading.Timer(1.0, lambda: os._exit(0)).start()
+        # Stäng ner huvudappen
+        os._exit(0)
         return True
     except Exception as e:
-        print(f"Kunde inte starta updater: {e}")
+        ctypes.windll.user32.MessageBoxW(0, f"Kunde inte köra updater: {str(e)}", "Systemfel", 0x10)
         return False
     
 @eel.expose
