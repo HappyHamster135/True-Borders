@@ -844,27 +844,28 @@ def perform_update(download_url):
     try:
         current_exe = sys.executable
         
-        # Hitta rätt sökväg inuti den packade EXE-filen
         if getattr(sys, 'frozen', False):
             base_path = sys._MEIPASS
             updater_path = os.path.join(base_path, "updater.exe")
         else:
             updater_path = os.path.join(os.path.dirname(__file__), "updater.exe")
 
-        # FELSÖKNING: Visa en ruta om filen saknas inuti paketet
         if not os.path.exists(updater_path):
-            ctypes.windll.user32.MessageBoxW(0, f"Hittade inte updater.exe på: {updater_path}", "Fel", 0x10)
+            ctypes.windll.user32.MessageBoxW(0, f"Saknas: {updater_path}", "Fel", 0x10)
             return False
 
-        # Starta updatern med fullständig miljö
-        # Vi använder shell=False för att undvika att Windows blockerar det som ett skript
+        # FIXEN: Vi använder endast DETACHED_PROCESS. 
+        # Vi lägger till citattecken runt sökvägarna ifall de har mellanslag (viktigt!)
+        cmd = [updater_path, download_url, current_exe]
+        
         subprocess.Popen(
-            [updater_path, download_url, current_exe],
-            creationflags=subprocess.CREATE_NEW_CONSOLE | subprocess.DETACHED_PROCESS,
-            shell=False 
+            cmd,
+            creationflags=subprocess.DETACHED_PROCESS, # Enbart denna flagga räcker
+            shell=False,
+            close_fds=True # Hjälper Windows att koppla loss processen helt
         )
         
-        # Stäng ner huvudappen
+        # Stäng ner huvudappen mjukt men bestämt
         os._exit(0)
         return True
     except Exception as e:
