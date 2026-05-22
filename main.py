@@ -3,35 +3,31 @@ import win32gui
 import win32con
 import win32ui
 import win32api
-from screeninfo import get_monitors
+import win32process
 import ctypes
+from ctypes import wintypes
 import json
 import os
 import base64
-import io
-from PIL import Image, ImageWin
 import threading
 import time
-from ctypes import wintypes
+import winreg
+import sys
+import subprocess
+import keyboard
 import pystray
+import urllib.request
+from screeninfo import get_monitors
 from PIL import Image, ImageDraw
 from io import BytesIO
-import winreg
-import keyboard
-import sys
-import win32process
-import subprocess
 import tkinter as tk
 from tkinter import filedialog
-import urllib.request
 
 # ==============================================================================================
 # 1. GLOBALA VARIABLER & INITIALISERING
 # ==============================================================================================
 
-# Sätt din nuvarande version här
-CURRENT_VERSION = "1.0.5" 
-# URL till en JSON-fil som du lägger på t.ex. GitHub (Raw länk)
+CURRENT_VERSION = "1.0.7" 
 UPDATE_INFO_URL = "https://raw.githubusercontent.com/HappyHamster135/True-Borders/main/update.json"
 
 tray_icon_instance = None
@@ -40,14 +36,18 @@ taskbar_is_hidden = False
 original_taskbar_autohide = False
 hotkey_enabled = False
 current_hotkey = 'ctrl+shift+b'
+user_taskbar_preference = None
+is_window_open = False
 
+# Hantera DPI-skalning för att få korrekta fönsterstorlekar på högupplösta skärmar
 try:
     ctypes.windll.shcore.SetProcessDpiAwareness(1)
-except:
+except Exception:
     ctypes.windll.user32.SetProcessDPIAware()
 
 eel.init('web')
 
+# Fönsterstilar och flaggor för Windows API
 GWL_STYLE = -16
 WS_CAPTION = 0x00C00000
 WS_THICKFRAME = 0x00040000
@@ -59,6 +59,7 @@ SWP_NOZORDER = 0x0004
 SWP_NOSIZE = 0x0001
 SWP_NOMOVE = 0x0002
 
+# Sätt upp mappar och filer för appens data
 APP_DATA_DIR = os.path.join(os.environ['APPDATA'], "TrueBorders")
 if not os.path.exists(APP_DATA_DIR):
     os.makedirs(APP_DATA_DIR)
@@ -74,15 +75,15 @@ def get_setting(key, default_val):
     try:
         with open(SETTINGS_FILE, "r") as f:
             return json.load(f).get(key, default_val)
-    except: 
+    except Exception: 
         return default_val
     
-# Radera if/else-blocket och skriv bara detta:
 start_minimized = get_setting("start_minimized", False)
 
 @eel.expose
 def get_current_version():
     return CURRENT_VERSION
+
 # ==============================================================================================
 # 2. PROFILHANTERING OCH AUTO-LAUNCHER
 # ==============================================================================================
@@ -97,7 +98,7 @@ def save_profile(game_name, data):
     if icon_b64:
         data['icon'] = icon_b64 
         
-    # Auto-learn Exe Path (försök hämta från processen)
+    # Försök automatiskt hitta spelets exe-fil via den aktiva processen
     hwnd = find_real_game_window(game_name)
     if hwnd != 0:
         try:
@@ -109,13 +110,20 @@ def save_profile(game_name, data):
                 if ctypes.windll.kernel32.QueryFullProcessImageNameW(h_process, 0, exe_buffer, ctypes.byref(size)):
                     data['exePath'] = exe_buffer.value
                 ctypes.windll.kernel32.CloseHandle(h_process)
-        except Exception as e:
+        except Exception:
             pass
 
     profiles[game_name].update(data) 
     
     with open(PROFILES_FILE, "w") as f:
         json.dump(profiles, f, indent=4)
+    
+    # NYTT: Om det är ett Paradox-spel, uppdatera även dess settings.txt
+    if 'resW' in data and 'resH' in data:
+        paradox_folder = _get_paradox_folder_name(game_name)
+        if paradox_folder:
+            update_paradox_resolution(game_name, data['resW'], data['resH'])
+    
     return True
 
 @eel.expose
@@ -148,7 +156,7 @@ def import_profiles_data(new_data):
                 json.dump(new_data, f, indent=4)
             return True
         return False
-    except:
+    except Exception:
         return False
 
 @eel.expose
@@ -158,9 +166,12 @@ def reorder_profiles(new_order_list):
     for name in new_order_list:
         if name in old_profiles:
             ordered_profiles[name] = old_profiles[name]
+    
+    # Lägg till eventuella profiler som missats i den nya sorteringen
     for name, data in old_profiles.items():
         if name not in ordered_profiles:
             ordered_profiles[name] = data
+            
     with open(PROFILES_FILE, "w") as f:
         json.dump(ordered_profiles, f, indent=4)
 
@@ -176,7 +187,7 @@ def launch_game(game_name):
             working_dir = os.path.dirname(exe_path)
             subprocess.Popen([exe_path], cwd=working_dir)
             return True
-        except:
+        except Exception:
             return False
     return False
 
@@ -186,8 +197,8 @@ def browse_exe():
     root.attributes('-topmost', True) 
     root.withdraw() 
     file_path = filedialog.askopenfilename(
-        title="Select Game Executable",
-        filetypes=[("Executables", "*.exe"), ("All Files", "*.*")]
+        title="Välj spelets körbara fil",
+        filetypes=[("Körbara filer", "*.exe"), ("Alla filer", "*.*")]
     )
     root.destroy()
     return file_path
@@ -203,11 +214,11 @@ def update_exe_path(game_name, new_path):
     return False
 
 # ==============================================================================================
-# 3. KÄRNFUNKTIONER FÖR BORDERLESS (Smart Search)
+# 3. KÄRNFUNKTIONER FÖR BORDERLESS
 # ==============================================================================================
 
 def find_real_game_window(search_title):
-    """Hittar fönstret med fuzzy matchning, ignorerar skräp och tar det största fönstret (Perfekt för The Alters/Emulatorer)"""
+    """Söker efter spelfönstret genom att titta på fönstrets storlek och titel för att undvika skräpfönster."""
     found_hwnds = []
     
     def callback(hwnd, _):
@@ -219,7 +230,7 @@ def find_real_game_window(search_title):
                 h = rect[3] - rect[1]
                 if w > 100 and h > 100:
                     found_hwnds.append((hwnd, w * h))
-        return True # MÅSTE finnas för att loopen ska fortsätta!
+        return True 
         
     win32gui.EnumWindows(callback, None)
     
@@ -233,41 +244,37 @@ def find_real_game_window(search_title):
 def is_game_running(title):
     return find_real_game_window(title) != 0
 
-
-
 @eel.expose
 def get_actual_window_pos(window_title):
-    """Läser av spelets FAKTISKA position på skärmen just nu."""
+    """Hämtar spelets exakta position och upplösning på skärmen."""
     hwnd = find_real_game_window(window_title)
     if hwnd == 0:
         return None
         
     rect = win32gui.GetWindowRect(hwnd)
-    client_rect = win32gui.GetClientRect(hwnd) # Hämtar spelets sanna upplösning
+    client_rect = win32gui.GetClientRect(hwnd)
     
     return {
         "x": rect[0],
         "y": rect[1],
-        "w": client_rect[2], # Använder client_rect för exakt bredd (t.ex. 2560)
-        "h": client_rect[3]  # Använder client_rect för exakt höjd (t.ex. 1440)
+        "w": client_rect[2], 
+        "h": client_rect[3]  
     }
 
 @eel.expose
 def is_borderless(window_title):
     global active_taskbar_game
-    # Om VI hanterar det just nu är det borderless i vår värld
     if active_taskbar_game and active_taskbar_game.get('name') == window_title:
         return True
         
     hwnd = find_real_game_window(window_title)
     if hwnd != 0:
         style = win32gui.GetWindowLong(hwnd, GWL_STYLE)
-        # Om WS_CAPTION saknas returnerar vi True
         return not (style & WS_CAPTION)
     return False
 
 def get_window_offsets(hwnd):
-    """Räknar ut exakt hur tjock den vita baren och sidokanterna är."""
+    """Räknar ut hur tjock fönsterramen och namnlisten är."""
     try:
         rect = win32gui.GetWindowRect(hwnd)
         client_rect = win32gui.GetClientRect(hwnd)
@@ -275,14 +282,10 @@ def get_window_offsets(hwnd):
         win_w = rect[2] - rect[0]
         win_h = rect[3] - rect[1]
         
-        # Client rect börjar alltid på 0,0 så vi tar bara bredd och höjd
         client_w = client_rect[2] 
         client_h = client_rect[3] 
         
-        # Sidokanten (oftast 8 pixlar)
         border_x = (win_w - client_w) // 2
-        
-        # Vita baren i toppen (oftast runt 31 pixlar)
         border_top = (win_h - client_h) - border_x
         
         return max(0, border_x), max(0, border_top)
@@ -301,27 +304,24 @@ def init_borderless(window_title, ui_x=None, ui_y=None, ui_w=None, ui_h=None):
     
     style = win32gui.GetWindowLong(hwnd, GWL_STYLE)
     
-    # --- DEN ULTIMATA LOGIKEN FÖR POSITION ---
-    # 1. Om Visual Map skickar in koordinater (När du trycker Apply på ett nytt spel)
+    # Hantera positionering beroende på om vi har sparade inställningar, UI-indata eller standardvärden
     if ui_x is not None:
         target_x, target_y = ui_x, ui_y
         target_w, target_h = ui_w, ui_h
-    # 2. Om spelet redan har en profil (Auto-apply i bakgrunden)
     elif profile:
         target_x = profile.get('realX', 0)
         target_y = profile.get('realY', 0)
         target_w = profile.get('resW', client_rect[2])
         target_h = profile.get('resH', client_rect[3])
-    # 3. Fallback om något går snett (Använder ClientToScreen för att slippa -8px buggen)
     else:
         try:
             pt = win32gui.ClientToScreen(hwnd, (0, 0))
             target_x, target_y = pt[0], pt[1]
-        except:
+        except Exception:
             target_x, target_y = rect[0], rect[1]
         target_w, target_h = client_rect[2], client_rect[3]
 
-    # --- APPLICERA ---
+    # Applicera inställningarna
     if style & win32con.WS_CAPTION:
         new_style = style & ~(win32con.WS_CAPTION | win32con.WS_THICKFRAME | win32con.WS_MINIMIZEBOX | win32con.WS_MAXIMIZEBOX | win32con.WS_SYSMENU)
         win32gui.SetWindowLong(hwnd, GWL_STYLE, new_style)
@@ -335,7 +335,7 @@ def init_borderless(window_title, ui_x=None, ui_y=None, ui_w=None, ui_h=None):
         flags = win32con.SWP_NOZORDER | win32con.SWP_NOACTIVATE
         win32gui.SetWindowPos(hwnd, 0, int(target_x), int(target_y), int(target_w), int(target_h), flags)
 
-    # --- AUTO LEARN EXE ---
+    # Försök spara spelets sökväg automatiskt om det saknas
     global active_taskbar_game
     try:
         _, pid = win32process.GetWindowThreadProcessId(hwnd)
@@ -352,7 +352,7 @@ def init_borderless(window_title, ui_x=None, ui_y=None, ui_w=None, ui_h=None):
                     with open(PROFILES_FILE, 'w') as f:
                         json.dump(profiles, f, indent=4)
             ctypes.windll.kernel32.CloseHandle(h_process)
-    except Exception as e:
+    except Exception:
         pass
 
     if profile:
@@ -372,10 +372,18 @@ def init_borderless(window_title, ui_x=None, ui_y=None, ui_w=None, ui_h=None):
 
 @eel.expose
 def restore_borders(window_title):
-    global active_taskbar_game
+    global active_taskbar_game, taskbar_is_hidden
+    
+    set_game_topmost(window_title, False)
+    
     if active_taskbar_game and active_taskbar_game.get('name') == window_title:
         active_taskbar_game = None
-        
+    
+    # Återställ taskbaren direkt
+    if taskbar_is_hidden:
+        set_taskbars_state(original_taskbar_autohide, False)
+        taskbar_is_hidden = False
+    
     hwnd = find_real_game_window(window_title)
     if hwnd == 0:
         return False
@@ -388,28 +396,21 @@ def restore_borders(window_title):
     curr_w = rect[2] - rect[0]
     curr_h = rect[3] - rect[1]
 
-    # --- FIXEN FÖR KRYMPANDE FÖNSTER ---
-    # Om fönstret just nu SAKNAR list, kommer Windows stjäla plats från spelytan 
-    # när listen läggs tillbaka. Vi måste göra ramen större för att kompensera!
     if not (style & win32con.WS_CAPTION):
-        curr_w += 16  # 8px på varje sida
-        curr_h += 39  # 31px top + 8px botten
-        curr_x -= 8   # Dra fönstret lite åt vänster så det förblir centrerat
+        curr_w += 16
+        curr_h += 39
+        curr_x -= 8
         curr_y -= 31
-    # -----------------------------------
 
-    # 1. Lägg tillbaka standard-stilarna (den vita baren och kanterna)
     new_style = style | (win32con.WS_CAPTION | win32con.WS_THICKFRAME | win32con.WS_MINIMIZEBOX | win32con.WS_MAXIMIZEBOX | win32con.WS_SYSMENU)
     win32gui.SetWindowLong(hwnd, GWL_STYLE, new_style)
     win32gui.SetWindowLong(hwnd, -20, 0x00040000) 
     
-    # 2. SÄKERHETSKOLL: Om fönstret är gömt ovanför skärmen
     if curr_y < 0:
         curr_y = 50
     if curr_x < 0:
         curr_x = 50
         
-    # 3. Tvinga fönstret att uppdatera sig
     flags = win32con.SWP_FRAMECHANGED | win32con.SWP_NOZORDER
     win32gui.SetWindowPos(hwnd, 0, curr_x, curr_y, curr_w, curr_h, flags)
         
@@ -431,11 +432,11 @@ def toggle_borderless(window_title):
 
 @eel.expose
 def update_window_pos(window_title, x, y, w, h):
-    if x is None or y is None: return 
+    if x is None or y is None: 
+        return 
     
     hwnd = find_real_game_window(window_title)
     if hwnd != 0:
-        # Bara flytta mjukt - inga overscan-beräkningar
         flags = 0x0004 | 0x0010 | 0x4000
         win32gui.SetWindowPos(hwnd, 0, int(x), int(y), int(w), int(h), flags)
 
@@ -455,26 +456,50 @@ def force_reapply_borderless(hwnd, x, y, w, h):
         new_style = style & ~(WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU | 0x00800000)
         win32gui.SetWindowLong(hwnd, GWL_STYLE, new_style)
         win32gui.SetWindowLong(hwnd, -20, 0) 
-        # Lade in SWP_NOZORDER (0x0004) så den INTE tvingar spelet till Always on Top!
         flags = SWP_FRAMECHANGED | 0x0004 | 0x0400 | 0x0040 
         win32gui.SetWindowPos(hwnd, 0, int(x), int(y), int(w), int(h) + 10, flags)
         win32gui.SetWindowPos(hwnd, 0, int(x), int(y), int(w), int(h), flags)
 
 @eel.expose
 def force_window_refresh(window_title, x, y, w, h):
-    if any(v is None for v in [x, y, w, h]): return 
+    if any(v is None for v in [x, y, w, h]): 
+        return 
     hwnd = find_real_game_window(window_title)
-    if not hwnd: return
+    if not hwnd: 
+        return
+    
+    profile = get_profile(window_title)
+    should_be_topmost = profile.get('alwaysOnTop', False) if profile else False
+    final_z = win32con.HWND_TOPMOST if should_be_topmost else win32con.HWND_NOTOPMOST
+    
     SWP_FLAGS = win32con.SWP_FRAMECHANGED | win32con.SWP_NOACTIVATE
+    
+    # Skapa en liten fönsteruppdatering för att tvinga fram en omritning
     win32gui.SetWindowPos(hwnd, 0, int(x), int(y), int(w) + 1, int(h) + 1, SWP_FLAGS)
     win32gui.SetWindowPos(hwnd, 0, int(x), int(y), int(w), int(h), SWP_FLAGS)
+    
+    # Växla z-ordning för att säkerställa att ramfixen fungerar som den ska
     win32gui.SetWindowPos(hwnd, win32con.HWND_NOTOPMOST, 0, 0, 0, 0, SWP_FLAGS | win32con.SWP_NOMOVE | win32con.SWP_NOSIZE)
     win32gui.SetWindowPos(hwnd, win32con.HWND_TOPMOST, 0, 0, 0, 0, SWP_FLAGS | win32con.SWP_NOMOVE | win32con.SWP_NOSIZE)
-    win32gui.SetWindowPos(hwnd, win32con.HWND_TOPMOST, int(x), int(y), int(w), int(h), win32con.SWP_FRAMECHANGED | win32con.SWP_SHOWWINDOW)
+    
+    # Avsluta och applicera det slutgiltiga z-order-läget
+    win32gui.SetWindowPos(hwnd, final_z, int(x), int(y), int(w), int(h), win32con.SWP_FRAMECHANGED | win32con.SWP_SHOWWINDOW)
 
 # ==============================================================================================
 # 4. FÖNSTER & SKÄRM-AVLÄSNING (Listor, Ikoner)
 # ==============================================================================================
+
+EXACT_IGNORE = ["Program Manager", "Settings", "Microsoft Text Input Application", "Windows Input Experience", "True Borders", "Task Manager", "Aktivitetshanteraren"]
+SUBSTRING_IGNORE = ["Overlay", "Default IME", " - Opera", " - Google Chrome", " - Mozilla Firefox", " - Microsoft Edge", " - Brave", " - Vivaldi"]
+
+def _is_valid_user_window(hwnd):
+    """Hjälpfunktion för att filtrera bort bakgrundsprogram och överlägg när vi listar öppna fönster."""
+    if not win32gui.IsWindowVisible(hwnd) or win32gui.GetWindowTextLength(hwnd) == 0:
+        return False, ""
+    title = win32gui.GetWindowText(hwnd).strip()
+    if not title or title in EXACT_IGNORE or any(sub in title for sub in SUBSTRING_IGNORE):
+        return False, ""
+    return True, title
 
 @eel.expose
 def get_monitor_layout():
@@ -489,16 +514,10 @@ def get_monitor_layout():
 @eel.expose
 def get_open_windows():
     titles = []
-    exact_ignore = ["Program Manager", "Settings", "Microsoft Text Input Application", "Windows Input Experience", "True Borders", "Task Manager", "Aktivitetshanteraren"]
-    substring_ignore = ["Overlay", "Default IME", " - Opera", " - Google Chrome", " - Mozilla Firefox", " - Microsoft Edge", " - Brave", " - Vivaldi"]
-
     def enum_windows_proc(hwnd, lParam):
-        if win32gui.IsWindowVisible(hwnd) and win32gui.GetWindowTextLength(hwnd) > 0:
-            title = win32gui.GetWindowText(hwnd).strip()
-            if not title or title in exact_ignore or any(sub in title for sub in substring_ignore):
-                return True
-            if title not in titles:
-                titles.append(title)
+        is_valid, title = _is_valid_user_window(hwnd)
+        if is_valid and title not in titles:
+            titles.append(title)
         return True
         
     win32gui.EnumWindows(enum_windows_proc, 0)
@@ -507,20 +526,14 @@ def get_open_windows():
 @eel.expose
 def get_windows_with_icons():
     windows_data = []
-    titles_seen = []
-    exact_ignore = ["Program Manager", "Settings", "Microsoft Text Input Application", "Windows Input Experience", "True Borders", "Task Manager", "Aktivitetshanteraren"]
-    substring_ignore = ["Overlay", "Default IME", " - Opera", " - Google Chrome", " - Mozilla Firefox", " - Microsoft Edge", " - Brave", " - Vivaldi"]
+    titles_seen = set()
 
     def enum_windows_proc(hwnd, lParam):
-        if win32gui.IsWindowVisible(hwnd) and win32gui.GetWindowTextLength(hwnd) > 0:
-            title = win32gui.GetWindowText(hwnd).strip()
-            if not title or title in exact_ignore or any(sub in title for sub in substring_ignore):
-                return True
-            
-            if title not in titles_seen:
-                titles_seen.append(title)
-                icon_b64 = get_icon_base64(hwnd) 
-                windows_data.append({"title": title, "icon": icon_b64})
+        is_valid, title = _is_valid_user_window(hwnd)
+        if is_valid and title not in titles_seen:
+            titles_seen.add(title)
+            icon_b64 = get_icon_base64(hwnd) 
+            windows_data.append({"title": title, "icon": icon_b64})
         return True
         
     win32gui.EnumWindows(enum_windows_proc, 0)
@@ -529,7 +542,8 @@ def get_windows_with_icons():
 @eel.expose
 def get_window_icon_base64(window_title):
     hwnd = find_real_game_window(window_title)
-    if hwnd == 0: return None
+    if hwnd == 0: 
+        return None
     return get_icon_base64(hwnd)
     
 def get_icon_base64(hwnd):
@@ -554,13 +568,16 @@ def get_icon_base64(hwnd):
         bmpstr = hbmp.GetBitmapBits(True)
         img = Image.frombuffer('RGBA', (bmpinfo['bmWidth'], bmpinfo['bmHeight']), bmpstr, 'raw', 'BGRA', 0, 1)
 
-        try: win32gui.DestroyIcon(hicon)
-        except: pass 
+        try: 
+            win32gui.DestroyIcon(hicon)
+        except Exception: 
+            pass 
             
         try:
             hdc.DeleteDC()
             win32gui.DeleteObject(hbmp.GetHandle())
-        except: pass
+        except Exception:
+            pass
 
         buffered = BytesIO()
         img.save(buffered, format="PNG")
@@ -598,7 +615,7 @@ def toggle_start_minimized(enabled):
         try:
             with open(SETTINGS_FILE, "r") as f:
                 settings = json.load(f)
-        except: 
+        except Exception: 
             pass
     settings["start_minimized"] = enabled
     with open(SETTINGS_FILE, "w") as f:
@@ -607,7 +624,6 @@ def toggle_start_minimized(enabled):
 
 @eel.expose
 def is_start_minimized():
-    # Returnerar True som standard ifall de inte har ändrat inställningen ännu
     return get_setting("start_minimized", True)
 
 def set_taskbar_autohide(enable):
@@ -620,18 +636,37 @@ def set_taskbar_autohide(enable):
     abd.lParam = ABS_AUTOHIDE if enable else ABS_ALWAYSONTOP
     ctypes.windll.shell32.SHAppBarMessage(ABM_SETSTATE, ctypes.byref(abd))
 
+def remember_user_taskbar_preference():
+    """Sparar användarens inställning för taskbaren innan vi börjar manipulera den."""
+    global user_taskbar_preference
+    if user_taskbar_preference is None:
+        user_taskbar_preference = get_taskbar_autohide_state()
+
+def refresh_user_taskbar_preference():
+    """Fångar upp ändringar användaren gjort manuellt i Windows när inget spel körs."""
+    global user_taskbar_preference, active_taskbar_game, taskbar_is_hidden
+    if not active_taskbar_game and not taskbar_is_hidden:
+        user_taskbar_preference = get_taskbar_autohide_state()
+
 def set_taskbars_state(hide_mode, disable_mode):
     user32 = ctypes.windll.user32
+    
     if disable_mode:
+        remember_user_taskbar_preference()
+        
+        # Vi sätter taskbaren till Autohide först för att undvika att fönster hoppar runt på skärmen
         set_taskbar_autohide(True)
+        
         def enum_handler_disable(hwnd, lParam):
             if win32gui.GetClassName(hwnd) in ["Shell_TrayWnd", "Shell_SecondaryTrayWnd"]:
-                user32.ShowWindow(hwnd, 0) 
+                user32.ShowWindow(hwnd, 0)
                 user32.EnableWindow(hwnd, False)
             return True
         win32gui.EnumWindows(enum_handler_disable, 0)
         return
+    
     if hide_mode:
+        remember_user_taskbar_preference()
         set_taskbar_autohide(True)
         def enum_handler_soft(hwnd, lParam):
             if win32gui.GetClassName(hwnd) in ["Shell_TrayWnd", "Shell_SecondaryTrayWnd"]:
@@ -639,14 +674,17 @@ def set_taskbars_state(hide_mode, disable_mode):
                 user32.EnableWindow(hwnd, True)
             return True
         win32gui.EnumWindows(enum_handler_soft, 0)
-    else:
-        set_taskbar_autohide(False)
-        def enum_handler_show(hwnd, lParam):
-            if win32gui.GetClassName(hwnd) in ["Shell_TrayWnd", "Shell_SecondaryTrayWnd"]:
-                user32.ShowWindow(hwnd, 5)
-                user32.EnableWindow(hwnd, True)
-            return True
-        win32gui.EnumWindows(enum_handler_show, 0)
+        return
+    
+    # Återställ till användarens ursprungliga preferens
+    pref = user_taskbar_preference if user_taskbar_preference is not None else False
+    set_taskbar_autohide(pref)
+    def enum_handler_show(hwnd, lParam):
+        if win32gui.GetClassName(hwnd) in ["Shell_TrayWnd", "Shell_SecondaryTrayWnd"]:
+            user32.ShowWindow(hwnd, 5)
+            user32.EnableWindow(hwnd, True)
+        return True
+    win32gui.EnumWindows(enum_handler_show, 0)
 
 @eel.expose
 def update_advanced_settings(window_title, hide, disable, on_top, border_fix):
@@ -658,11 +696,26 @@ def update_advanced_settings(window_title, hide, disable, on_top, border_fix):
         profiles[window_title]['borderFix'] = border_fix 
         with open(PROFILES_FILE, 'w') as f:
             json.dump(profiles, f, indent=4)
+    
+    global active_taskbar_game, taskbar_is_hidden
+    if active_taskbar_game and active_taskbar_game['name'] == window_title:
+        active_taskbar_game['hide'] = hide
+        active_taskbar_game['disable'] = disable
+        
+        if hide or disable:
+            set_taskbars_state(hide, disable)
+            taskbar_is_hidden = True
+        else:
+            set_taskbars_state(False, False)
+            taskbar_is_hidden = False
             
-    set_game_topmost(window_title, on_top)
+    # Åtgärda ramen först så att vi inte påverkar z-ordningen i onödan
     if border_fix:
         p = profiles.get(window_title)
-        force_window_refresh(window_title, p['realX'], p['realY'], p['resW'], p['resH'])
+        if p:
+            force_window_refresh(window_title, p['realX'], p['realY'], p['resW'], p['resH'])
+    
+    set_game_topmost(window_title, on_top)
 
 @eel.expose
 def update_taskbar_setting(game_name, hide_val, disable_val):
@@ -672,22 +725,34 @@ def update_taskbar_setting(game_name, hide_val, disable_val):
         profiles[game_name]['disableTaskbar'] = disable_val
         with open(PROFILES_FILE, "w") as f:
             json.dump(profiles, f, indent=4)
-        global active_taskbar_game
+            
+        global active_taskbar_game, taskbar_is_hidden
         if active_taskbar_game and active_taskbar_game['name'] == game_name:
             active_taskbar_game['hide'] = hide_val
             active_taskbar_game['disable'] = disable_val
+            
+            if hide_val or disable_val:
+                set_taskbars_state(hide_val, disable_val)
+                taskbar_is_hidden = True
+            else:
+                set_taskbars_state(False, False)
+                taskbar_is_hidden = False
+                
         return True
     return False
 
 @eel.expose
 def is_admin():
-    try: return ctypes.windll.shell32.IsUserAnAdmin() != 0
-    except: return False
+    try: 
+        return ctypes.windll.shell32.IsUserAnAdmin() != 0
+    except Exception: 
+        return False
 
 @eel.expose
 def set_app_on_top():
     hwnd = win32gui.FindWindow(None, "True Borders")
-    if hwnd != 0: win32gui.SetWindowPos(hwnd, -1, 0, 0, 0, 0, 3)
+    if hwnd != 0: 
+        win32gui.SetWindowPos(hwnd, -1, 0, 0, 0, 0, 3)
 
 @eel.expose
 def set_game_topmost(window_title, is_topmost):
@@ -701,8 +766,10 @@ def toggle_windows_optimizations(enable=True):
     reg_path = r"Software\Microsoft\DirectX\UserGpuPreferences"
     try:
         key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, reg_path, 0, winreg.KEY_ALL_ACCESS)
-        try: current_value, _ = winreg.QueryValueEx(key, "DirectXUserGlobalSettings")
-        except: current_value = ""
+        try: 
+            current_value, _ = winreg.QueryValueEx(key, "DirectXUserGlobalSettings")
+        except Exception: 
+            current_value = ""
 
         settings = {}
         if current_value:
@@ -728,8 +795,10 @@ def toggle_autostart(enabled):
             app_path = sys.executable if getattr(sys, 'frozen', False) else os.path.abspath(sys.argv[0])
             winreg.SetValueEx(key, APP_NAME, 0, winreg.REG_SZ, f'"{app_path}" --autostart')
         else:
-            try: winreg.DeleteValue(key, APP_NAME)
-            except FileNotFoundError: pass
+            try: 
+                winreg.DeleteValue(key, APP_NAME)
+            except FileNotFoundError: 
+                pass
         winreg.CloseKey(key)
         return True
     except Exception:
@@ -737,7 +806,7 @@ def toggle_autostart(enabled):
 
 @eel.expose
 def check_latency_boost_status():
-    is_admin = ctypes.windll.shell32.IsUserAnAdmin() != 0
+    user_is_admin = ctypes.windll.shell32.IsUserAnAdmin() != 0
     is_active = False
     reg_path = r"Software\Microsoft\DirectX\UserGpuPreferences"
     try:
@@ -754,7 +823,7 @@ def check_latency_boost_status():
                     break 
     except Exception:
         pass
-    return {"is_active": is_active, "is_admin": is_admin}
+    return {"is_active": is_active, "is_admin": user_is_admin}
 
 @eel.expose
 def is_autostart_enabled():
@@ -763,14 +832,16 @@ def is_autostart_enabled():
         winreg.QueryValueEx(key, APP_NAME)
         winreg.CloseKey(key)
         return True
-    except:
+    except Exception:
         return False
 
 @eel.expose
 def set_custom_hotkey(hotkey_str, enable):
     global hotkey_enabled, current_hotkey
-    try: keyboard.unhook_all_hotkeys()
-    except Exception: pass
+    try: 
+        keyboard.unhook_all_hotkeys()
+    except Exception: 
+        pass
         
     hotkey_enabled = enable
     current_hotkey = hotkey_str
@@ -778,18 +849,22 @@ def set_custom_hotkey(hotkey_str, enable):
     if enable and current_hotkey:
         try:
             keyboard.add_hotkey(current_hotkey, hotkey_action)
-        except: return False
+        except Exception: 
+            return False
     return True
 
 def hotkey_action():
     global hotkey_enabled, active_taskbar_game
-    if not hotkey_enabled: return
+    if not hotkey_enabled: 
+        return
 
     if active_taskbar_game is not None:
         game_name = active_taskbar_game['name']
         toggle_borderless(game_name)
-        try: eel.update_switch_from_python(game_name, False)
-        except: pass
+        try: 
+            eel.update_switch_from_python(game_name, False)
+        except Exception: 
+            pass
         return
 
     profiles = get_all_profiles()
@@ -798,29 +873,143 @@ def hotkey_action():
     
     if active_title in profiles:
         toggle_borderless(active_title)
-        try: eel.update_switch_from_python(active_title, True)
-        except: pass
+        try: 
+            eel.update_switch_from_python(active_title, True)
+        except Exception: 
+            pass
         return
         
     open_windows = get_open_windows()
     for window in open_windows:
         if window in profiles:
             toggle_borderless(window)
-            try: eel.update_switch_from_python(window, True)
-            except: pass
+            try: 
+                eel.update_switch_from_python(window, True)
+            except Exception: 
+                pass
             return
 
-try: keyboard.add_hotkey('ctrl+shift+b', hotkey_action)
-except Exception: pass
+try: 
+    keyboard.add_hotkey('ctrl+shift+b', hotkey_action)
+except Exception: 
+    pass
+
+# ==============================================================================================
+# 5.5 PARADOX-INTEGRATION (settings.txt-editor för CK3, EU4, Stellaris, HOI4, Vic3, Imperator)
+# ==============================================================================================
+
+# Mappar speltitlar till deras Paradox-mappnamn under Documents/Paradox Interactive/
+PARADOX_GAMES = {
+    "Crusader Kings III": "Crusader Kings III",
+    "Europa Universalis IV": "Europa Universalis IV",
+    "Stellaris": "Stellaris",
+    "Hearts of Iron IV": "Hearts of Iron IV",
+    "Victoria 3": "Victoria 3",
+    "Imperator: Rome": "Imperator",
+}
+
+def _get_paradox_folder_name(game_title):
+    """Identifierar om titeln är ett Paradox-spel och returnerar mappnamnet."""
+    for known_title, folder in PARADOX_GAMES.items():
+        if known_title.lower() in game_title.lower():
+            return folder
+    return None
+
+def _get_paradox_settings_path(game_title):
+    """Bygger den fulla sökvägen till spelets settings.txt."""
+    folder = _get_paradox_folder_name(game_title)
+    if not folder:
+        return None
+    
+    docs = os.path.join(os.environ['USERPROFILE'], 'Documents')
+    path = os.path.join(docs, 'Paradox Interactive', folder, 'settings.txt')
+    
+    if not os.path.exists(path):
+        return None
+    return path
+
+def update_paradox_resolution(game_title, width, height):
+    """Skriver upplösning till Paradox-spelets pdx_settings.txt."""
+    folder = _get_paradox_folder_name(game_title)
+    if not folder:
+        return False, "not_paradox"
+    
+    docs = os.path.join(os.environ['USERPROFILE'], 'Documents')
+    settings_path = os.path.join(docs, 'Paradox Interactive', folder, 'pdx_settings.txt')
+    
+    if not os.path.exists(settings_path):
+        return False, "settings_file_not_found"
+    
+    try:
+        with open(settings_path, 'r', encoding='utf-8-sig') as f:
+            content = f.read()
+        
+        # Backup första gången
+        backup_path = settings_path + '.truebackup'
+        if not os.path.exists(backup_path):
+            with open(backup_path, 'w', encoding='utf-8-sig') as f:
+                f.write(content)
+        
+        import re
+        new_res = f'"{width}x{height}"'
+        
+        # Mönstret matchar:  "windowed_resolution"={\n  version=N\n  value="WxH"\n}
+        # Vi byter bara value-raden, behåller strukturen
+        def replace_res_value(match, new_value):
+            block = match.group(0)
+            return re.sub(r'value="\d+x\d+"', f'value={new_value}', block)
+        
+        # Uppdatera windowed_resolution
+        windowed_pattern = r'"windowed_resolution"=\{[^}]*\}'
+        if re.search(windowed_pattern, content):
+            content = re.sub(
+                windowed_pattern,
+                lambda m: replace_res_value(m, new_res),
+                content,
+                count=1
+            )
+        
+        # Uppdatera även fullscreen_resolution som backup ifall användaren togglar lägen
+        fullscreen_pattern = r'"fullscreen_resolution"=\{[^}]*\}'
+        if re.search(fullscreen_pattern, content):
+            content = re.sub(
+                fullscreen_pattern,
+                lambda m: replace_res_value(m, new_res),
+                content,
+                count=1
+            )
+        
+        # Tvinga windowed mode (matchar "display_mode"={ version=0 value="windowed" })
+        display_mode_pattern = r'("display_mode"=\{[^}]*?value=)"[^"]+"'
+        content = re.sub(display_mode_pattern, r'\1"windowed"', content, count=1)
+        
+        with open(settings_path, 'w', encoding='utf-8-sig') as f:
+            f.write(content)
+        
+        return True, "updated"
+    except Exception as e:
+        return False, str(e)
+
+@eel.expose
+def is_paradox_game(game_title):
+    """Frontend-helper för att veta om vi ska visa varningen om omstart."""
+    return _get_paradox_folder_name(game_title) is not None
+
+@eel.expose
+def apply_paradox_resolution(game_title, width, height):
+    """Anropas från frontend när användaren sparar profil för ett Paradox-spel."""
+    success, msg = update_paradox_resolution(game_title, int(width), int(height))
+    return {"success": success, "message": msg}
+
 
 # ==============================================================================================
 # 6. BAKGRUNDS-TRÅDAR & TRAY
 # ==============================================================================================
+
 @eel.expose
 def check_for_updates():
-    """Kollar om det finns en nyare version tillgänglig på nätet."""
+    """Kollar om det finns en nyare version av appen tillgänglig via GitHub."""
     try:
-        # Hämta JSON-data från din URL
         req = urllib.request.urlopen(UPDATE_INFO_URL, timeout=5)
         data = json.loads(req.read().decode('utf-8'))
         latest_version = data.get("version")
@@ -854,18 +1043,15 @@ def perform_update(download_url):
             ctypes.windll.user32.MessageBoxW(0, f"Saknas: {updater_path}", "Fel", 0x10)
             return False
 
-        # FIXEN: Vi använder endast DETACHED_PROCESS. 
-        # Vi lägger till citattecken runt sökvägarna ifall de har mellanslag (viktigt!)
         cmd = [updater_path, download_url, current_exe]
         
         subprocess.Popen(
             cmd,
-            creationflags=subprocess.DETACHED_PROCESS, # Enbart denna flagga räcker
+            creationflags=subprocess.DETACHED_PROCESS, 
             shell=False,
-            close_fds=True # Hjälper Windows att koppla loss processen helt
+            close_fds=True 
         )
         
-        # Stäng ner huvudappen mjukt men bestämt
         os._exit(0)
         return True
     except Exception as e:
@@ -882,7 +1068,8 @@ def hide_to_tray():
 
     if hwnd != 0:
         win32gui.ShowWindow(hwnd, 0)
-        if tray_icon_instance is not None: return 
+        if tray_icon_instance is not None: 
+            return 
             
         image = Image.new('RGB', (64, 64), color=(15, 32, 39))
         draw = ImageDraw.Draw(image)
@@ -899,13 +1086,15 @@ def hide_to_tray():
             icon.stop()
             try:
                 set_taskbars_state(original_taskbar_autohide, False)
-                if active_taskbar_game: restore_borders(active_taskbar_game['name'])
-            except: pass
+                if active_taskbar_game:
+                    restore_borders(active_taskbar_game['name'])
+            except Exception: 
+                pass
             os._exit(0)
 
         menu = pystray.Menu(
-            pystray.MenuItem("Show True-Borders", show_window, default=True),
-            pystray.MenuItem("Exit Completely", quit_app)
+            pystray.MenuItem("Visa True-Borders", show_window, default=True),
+            pystray.MenuItem("Avsluta helt", quit_app)
         )
         
         tray_icon_instance = pystray.Icon("True-Borders", image, "True-Borders", menu)
@@ -913,14 +1102,22 @@ def hide_to_tray():
 
 def taskbar_monitor():
     global taskbar_is_hidden, active_taskbar_game
+    poll_counter = 0
     while True:
         time.sleep(0.1)
         try:
             if not active_taskbar_game:
                 if taskbar_is_hidden: 
-                    set_taskbars_state(original_taskbar_autohide, False)
+                    set_taskbars_state(False, False)
                     taskbar_is_hidden = False
+                
+                poll_counter += 1
+                if poll_counter >= 20:
+                    poll_counter = 0
+                    refresh_user_taskbar_preference()
                 continue
+            
+            poll_counter = 0
                 
             game_name = active_taskbar_game['name']
             hwnd = find_real_game_window(game_name)
@@ -944,11 +1141,11 @@ def taskbar_monitor():
                         taskbar_is_hidden = True
                 else:
                     if taskbar_is_hidden:
-                        set_taskbars_state(original_taskbar_autohide, False)
+                        set_taskbars_state(False, False)
                         taskbar_is_hidden = False
             else:
                 if taskbar_is_hidden:
-                    set_taskbars_state(original_taskbar_autohide, False)
+                    set_taskbars_state(False, False)
                     taskbar_is_hidden = False
                 active_taskbar_game = None 
         except Exception:
@@ -957,10 +1154,10 @@ def taskbar_monitor():
 known_auto_applied_games = set()
 
 def background_auto_apply_scanner():
-    """Körs i Python dygnet runt. Somnar aldrig även om UI:t ligger i Tray!"""
+    """Bakgrundsskanner som letar efter nya spel för att applicera inställningar automatiskt."""
     global known_auto_applied_games
     while True:
-        time.sleep(2.5) # Söker varannan sekund
+        time.sleep(2.5) 
         try:
             profiles = get_all_profiles()
             if not profiles:
@@ -968,26 +1165,27 @@ def background_auto_apply_scanner():
                 
             open_windows = get_open_windows()
             
-            # 1. Rensa bort spel från minnet som har stängts
+            # Rensa bort spel från minnet om de har stängts av
             known_auto_applied_games = {g for g in known_auto_applied_games if g in open_windows}
             
-            # 2. Leta efter nya spel att applicera på
+            # Leta igenom alla aktiva fönster för att se om något spel ska justeras
             for win in open_windows:
                 if win in profiles and win not in known_auto_applied_games:
                     known_auto_applied_games.add(win)
                     
                     if not is_borderless(win):
-                        print(f"Auto-applied: {win} from background!")
+                        print(f"Automatisk applicering: {win} från bakgrunden")
                         init_borderless(win)
                         
-                        # Fixa Always on Top om profilen kräver det
                         p = profiles[win]
                         if p.get('alwaysOnTop'):
                             set_game_topmost(win, True)
                             
-                        # Försök slå om UI-switchen (om UI:t råkar vara synligt)
-                        try: eel.update_switch_from_python(win, True)
-                        except: pass
+                        # Försök slå om brytaren i användargränssnittet om det är synligt
+                        try: 
+                            eel.update_switch_from_python(win, True)
+                        except Exception: 
+                            pass
         except Exception:
             pass
 
@@ -996,23 +1194,40 @@ def background_auto_apply_scanner():
 # ==============================================================================================
 
 def open_tb_window():
-    """Startar Eel-fönstret (öppnas bara när användaren klickar i tray)."""
+    """Startar programfönstret (öppnas när användaren klickar på ikonen i meddelandefältet)."""
     global is_window_open
     if is_window_open:
-        # Om fönstret redan är öppet, ta det till förgrunden
+        # Om fönstret redan är öppet hämtar vi det till förgrunden
         hwnd = win32gui.FindWindow(None, "True Borders")
         if hwnd != 0:
-            win32gui.ShowWindow(hwnd, 9) # SW_RESTORE
+            win32gui.ShowWindow(hwnd, 9) 
             win32gui.SetForegroundWindow(hwnd)
         return
 
     is_window_open = True
-    app_width = 900 
-    app_height = 980 
-    screen_width = win32api.GetSystemMetrics(0)
-    screen_height = win32api.GetSystemMetrics(1)
-    center_x = (screen_width // 2) - (app_width // 2)
-    center_y = (screen_height // 2) - (app_height // 2)
+    
+    # Hämta arbetsytan (skärmen MINUS taskbar)
+    SPI_GETWORKAREA = 0x0030
+    work_area = wintypes.RECT()
+    ctypes.windll.user32.SystemParametersInfoW(
+        SPI_GETWORKAREA, 0, ctypes.byref(work_area), 0
+    )
+    
+    work_width = work_area.right - work_area.left
+    work_height = work_area.bottom - work_area.top
+    
+    # Önskad storlek, men krymp om skärmen är mindre
+    # 40px marginal så fönstret inte ligger i kanten
+    desired_width = 900 
+    desired_height = 980
+    margin = 40
+    
+    app_width = min(desired_width, work_width - margin)
+    app_height = min(desired_height, work_height - margin)
+    
+    # Centrera inom arbetsytan (inte hela skärmen!)
+    center_x = work_area.left + (work_width - app_width) // 2
+    center_y = work_area.top + (work_height - app_height) // 2
 
     cmd_args = [
         '--disable-extensions', 
@@ -1020,35 +1235,29 @@ def open_tb_window():
         '--no-default-browser-check'
     ]
 
-    # Starta Eel-fönstret centrerat
     eel.start('index.html', 
               mode='chrome', 
               size=(app_width, app_height), 
               position=(center_x, center_y), 
               close_callback=on_app_close,
               cmdline_args=cmd_args,
-              block=True # Detta blockerar tills fönstret stängs
+              block=True 
     )
-    # När blockeringen släpper har användaren stängt fönstret
     is_window_open = False
 
 # ==============================================================================================
 # 8. HUVUDPROGRAM & TRAY-IKON
 # ==============================================================================================
 
-is_window_open = False # Flagga för att hålla koll på fönsterstatus
-
 def setup_tray_ninja():
-    """Skapar tray-ikonen direkt (inget fönster öppnas)."""
+    """Skapar bakgrundsikonen utan att visa fönstret direkt."""
     global tray_icon_instance
     
-    # Skapa en enkel ikon
     image = Image.new('RGB', (64, 64), color=(15, 32, 39))
     draw = ImageDraw.Draw(image)
     draw.rectangle((16, 16, 48, 48), fill=(8, 217, 214), outline=(255, 46, 99), width=4)
     
     def on_show(icon, item):
-        # Öppnar Eel-fönstret i en ny tråd
         threading.Thread(target=open_tb_window, daemon=True).start()
 
     def on_quit(icon, item):
@@ -1057,24 +1266,22 @@ def setup_tray_ninja():
         os._exit(0)
 
     menu = pystray.Menu(
-        pystray.MenuItem("Open True Borders", on_show, default=True),
-        pystray.MenuItem("Exit Completely", on_quit)
+        pystray.MenuItem("Öppna True Borders", on_show, default=True),
+        pystray.MenuItem("Avsluta helt", on_quit)
     )
     
     tray_icon_instance = pystray.Icon("TrueBordersNinja", image, "True Borders", menu)
     threading.Thread(target=tray_icon_instance.run, daemon=True).start()
 
 def restore_everything_on_exit():
-    """Städar upp och återställer alla spel när appen stängs."""
+    """Städar upp och återställer alla spel samt systeminställningar när applikationen stängs ner."""
     try:
         set_taskbars_state(original_taskbar_autohide, False)
         
-        # 1. Återställ spelet som styr taskbaren
         global active_taskbar_game
         if active_taskbar_game:
             restore_borders(active_taskbar_game['name'])
             
-        # 2. Återställ alla andra spel som scannern har hittat
         global known_auto_applied_games
         for game in list(known_auto_applied_games):
             restore_borders(game)
@@ -1082,25 +1289,22 @@ def restore_everything_on_exit():
         pass
 
 def on_app_close(page, sockets):
-    """Callback för när användaren stänger Eel-fönstret med krysset."""
+    """Körs när användaren klickar på stängknappen i huvudfönstret."""
     restore_everything_on_exit()
     os._exit(0)
 
-# === STARTA NINJA-ARKITEKTUREN ===
+# === STARTA APPLIKATIONEN ===
 
 original_taskbar_autohide = get_taskbar_autohide_state()
+user_taskbar_preference = original_taskbar_autohide
 threading.Thread(target=taskbar_monitor, daemon=True).start()
 threading.Thread(target=background_auto_apply_scanner, daemon=True).start()
 
-# Skapa tray-ikonen direkt
 setup_tray_ninja()
 
 if start_minimized:
-    # Starta helt osynligt, bara tray-ikonen körs
-    print("Ninja-start active. Only tray icon is running.")
-    # Vi behöver hålla huvudprogrammet vid liv utan blockering
+    print("Programmet startades i bakgrunden. Klicka på ikonen för att öppna fönstret.")
     while True:
         time.sleep(1)
 else:
-    # Starta fönstret direkt som vanligt
     open_tb_window()
