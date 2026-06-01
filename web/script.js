@@ -285,11 +285,40 @@ async function initMap() {
 
     const profile = await eel.get_profile(windowName)();
 
-    // Samma skottsäkra check här!
     if (profile && profile.resW !== undefined) {
-      // --- SCENARIO 1: PROFILEN FINNS ---
+      // --- SCENARIO 1: PROFILEN FINNS — spara nya värden + applicera ---
       await autoSaveCurrentState();
-      let success = await eel.init_borderless(windowName)();
+
+      // Är spelet redan borderless? Då behöver vi inte init:a om — bara
+      // se till att position/storlek matchar profilen. init_borderless gör
+      // ett helt fönsterstil-omdrag som triggar flimmer i vissa motorer.
+      const alreadyBorderless = await eel.is_borderless(windowName)();
+      let success;
+      if (alreadyBorderless) {
+        const dragBox = document.getElementById("drag-box");
+        const posX = Math.round(
+          (parseFloat(dragBox.style.left) - offsetX) / globalScale + minRealX,
+        );
+        const posY = Math.round(
+          (parseFloat(dragBox.style.top) - offsetY) / globalScale + minRealY,
+        );
+        const w = parseInt(document.getElementById("resW").value) || 1920;
+        const h = parseInt(document.getElementById("resH").value) || 1080;
+        await eel.update_window_pos(windowName, posX, posY, w, h)();
+        success = true;
+      } else {
+        const dragBox = document.getElementById("drag-box");
+        const posX = Math.round(
+          (parseFloat(dragBox.style.left) - offsetX) / globalScale + minRealX,
+        );
+        const posY = Math.round(
+          (parseFloat(dragBox.style.top) - offsetY) / globalScale + minRealY,
+        );
+        const w = parseInt(document.getElementById("resW").value) || 1920;
+        const h = parseInt(document.getElementById("resH").value) || 1080;
+        success = await eel.init_borderless(windowName, posX, posY, w, h)();
+      }
+
       if (success) {
         isCurrentlyBorderlessSession = true;
         const statusEl = document.getElementById("status-polished");
@@ -299,21 +328,19 @@ async function initMap() {
         }
       }
     } else {
-      // --- SCENARIO 2: NYTT SPEL (Skicka UI-värden direkt till Python!) ---
+      // --- SCENARIO 2: NYTT SPEL — applicera + fråga om sparning ---
       const dragBox = document.getElementById("drag-box");
 
-      // Räkna ut exakt var den gröna rutan är just nu
-      let posX = Math.round(
+      const posX = Math.round(
         (parseFloat(dragBox.style.left) - offsetX) / globalScale + minRealX,
       );
-      let posY = Math.round(
+      const posY = Math.round(
         (parseFloat(dragBox.style.top) - offsetY) / globalScale + minRealY,
       );
-      let safeW = parseInt(document.getElementById("resW").value) || 1920;
-      let safeH = parseInt(document.getElementById("resH").value) || 1080;
+      const safeW = parseInt(document.getElementById("resW").value) || 1920;
+      const safeH = parseInt(document.getElementById("resH").value) || 1080;
 
-      // Skicka in dem i init_borderless så Python inte behöver gissa!
-      let success = await eel.init_borderless(
+      const success = await eel.init_borderless(
         windowName,
         posX,
         posY,
@@ -324,13 +351,10 @@ async function initMap() {
       if (success) {
         isCurrentlyBorderlessSession = true;
 
-        // NYTT: Om det är ett Paradox-spel, varna om omstart
+        // Paradox-varning om relevant
         const isParadox = await eel.is_paradox_game(windowName)();
         if (isParadox) {
-          const safeW = parseInt(document.getElementById("resW").value) || 1920;
-          const safeH = parseInt(document.getElementById("resH").value) || 1080;
           await eel.apply_paradox_resolution(windowName, safeW, safeH)();
-
           const statusEl = document.getElementById("status-polished");
           if (statusEl) {
             statusEl.innerText = `⚠️ ${windowName}: restart the game for changes to take effect`;
@@ -338,6 +362,7 @@ async function initMap() {
           }
         }
 
+        // Fråga om användaren vill spara profilen — BARA för nya spel
         document.getElementById("prompt-game-name").innerText = windowName;
         document.getElementById("save-prompt-modal").style.display = "block";
       }
@@ -412,7 +437,14 @@ async function initMap() {
 
   setInterval(autoApplyScanner, 2000);
   window.addEventListener("focus", () => {
-    if (typeof refreshMonitorLayout === "function") refreshMonitorLayout();
+    const mapTab = document.getElementById("map-tab");
+    if (
+      mapTab &&
+      mapTab.style.display !== "none" &&
+      typeof refreshMonitorLayout === "function"
+    ) {
+      refreshMonitorLayout();
+    }
   });
 }
 
@@ -420,6 +452,14 @@ async function refreshMonitorLayout() {
   const monitors = await eel.get_monitor_layout()();
   const map = document.getElementById("monitor-map");
   if (!map) return;
+
+  // Säkerhet: om kartan inte har riktiga mått just nu (dold tab,
+  // mitt i transition, etc) — gör inget. Den ritas korrekt när
+  // användaren är på map-tabben.
+  if (map.clientWidth < 50 || map.clientHeight < 50) return;
+
+  // Vi måste också ha minst en monitor att rita
+  if (!monitors || monitors.length === 0) return;
 
   // Nollställ skala-räknarna
   minRealX = 0;
@@ -438,10 +478,17 @@ async function refreshMonitorLayout() {
   realMonitorW = maxRealX - minRealX;
   realMonitorH = maxRealY - minRealY;
 
+  // Sanity check innan vi dividerar
+  if (realMonitorW <= 0 || realMonitorH <= 0) return;
+
   const padding = 20;
   const sx = (map.clientWidth - padding * 2) / realMonitorW;
   const sy = (map.clientHeight - padding * 2) / realMonitorH;
   globalScale = Math.min(sx, sy);
+
+  // Sista skyddet: orealistiskt liten skala = något är fel, gör inget
+  if (globalScale < 0.001) return;
+
   offsetX = (map.clientWidth - realMonitorW * globalScale) / 2;
   offsetY = (map.clientHeight - realMonitorH * globalScale) / 2;
 
@@ -668,6 +715,26 @@ function updateDragBoxSize() {
   dragBox.style.height = scaledH + "px";
 }
 
+let _lastSentPos = { x: null, y: null, w: null, h: null };
+let _lastSentTime = 0;
+let _pendingMove = null;
+let _pendingTimer = null;
+const MIN_INTERVAL_MS = 33;
+
+function _sendMoveNow(windowName, realX, realY, resW, resH) {
+  if (
+    _lastSentPos.x === realX &&
+    _lastSentPos.y === realY &&
+    _lastSentPos.w === resW &&
+    _lastSentPos.h === resH
+  ) {
+    return;
+  }
+  _lastSentPos = { x: realX, y: realY, w: resW, h: resH };
+  _lastSentTime = performance.now();
+  eel.update_window_pos(windowName, realX, realY, resW, resH)();
+}
+
 function triggerRealTimeMove(elmnt, exactTop = null, exactLeft = null) {
   const windowName = document.getElementById("window_title_input").value;
 
@@ -702,7 +769,36 @@ function triggerRealTimeMove(elmnt, exactTop = null, exactLeft = null) {
   if (calcTop <= offsetY + 0.5) realY = minRealY;
   if (calcLeft <= offsetX + 0.5) realX = minRealX;
 
-  eel.update_window_pos(windowName, realX, realY, resW, resH)();
+  const now = performance.now();
+  const elapsed = now - _lastSentTime;
+
+  _pendingMove = { windowName, realX, realY, resW, resH };
+
+  if (elapsed >= MIN_INTERVAL_MS) {
+    // Tillräckligt lång tid sen sist — skicka direkt
+    _sendMoveNow(windowName, realX, realY, resW, resH);
+    _pendingMove = null;
+    if (_pendingTimer) {
+      clearTimeout(_pendingTimer);
+      _pendingTimer = null;
+    }
+  } else if (!_pendingTimer) {
+    // Schemalägg en senare skickning så vi inte missar SLUTpositionen
+    const wait = MIN_INTERVAL_MS - elapsed;
+    _pendingTimer = setTimeout(() => {
+      _pendingTimer = null;
+      if (_pendingMove) {
+        _sendMoveNow(
+          _pendingMove.windowName,
+          _pendingMove.realX,
+          _pendingMove.realY,
+          _pendingMove.resW,
+          _pendingMove.resH,
+        );
+        _pendingMove = null;
+      }
+    }, wait);
+  }
 }
 
 function makeDraggable(elmnt) {
@@ -718,6 +814,7 @@ function makeDraggable(elmnt) {
     pos4 = e.clientY;
     document.onmouseup = closeDragElement;
     document.onmousemove = elementDrag;
+    eel.begin_user_drag()(); // NYTT
   };
 
   function elementDrag(e) {
@@ -762,7 +859,7 @@ function makeDraggable(elmnt) {
   async function closeDragElement() {
     document.onmouseup = null;
     document.onmousemove = null;
-
+    eel.end_user_drag()();
     // Auto-save när du släpper musen!
     const windowName = document.getElementById("window_title_input").value;
   }

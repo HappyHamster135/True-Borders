@@ -26,7 +26,7 @@ from tkinter import filedialog
 # 1. GLOBALA VARIABLER & INITIALISERING
 # ==============================================================================================
 
-CURRENT_VERSION = "1.1.0" 
+CURRENT_VERSION = "1.1.1" 
 UPDATE_INFO_URL = "https://raw.githubusercontent.com/HappyHamster135/True-Borders/main/update.json"
 
 tray_icon_instance = None
@@ -37,6 +37,8 @@ hotkey_enabled = False
 current_hotkey = 'ctrl+shift+b'
 user_taskbar_preference = None
 is_window_open = False
+last_intentional_move_ts = 0.0
+is_user_dragging = False
 
 # Hantera DPI-skalning för att få korrekta fönsterstorlekar på högupplösta skärmar
 try:
@@ -473,6 +475,9 @@ def init_borderless(window_title, ui_x=None, ui_y=None, ui_w=None, ui_h=None):
         win32gui.SetWindowPos(hwnd, 0, int(target_x), int(target_y), int(target_w), int(target_h), flags)
 
     # Försök spara spelets sökväg automatiskt om det saknas
+    global last_intentional_move_ts
+    last_intentional_move_ts = time.time()  
+
     global active_taskbar_game
     try:
         _, pid = win32process.GetWindowThreadProcessId(hwnd)
@@ -568,6 +573,20 @@ def toggle_borderless(window_title):
         return "restored"
 
 @eel.expose
+def begin_user_drag():
+    global is_user_dragging, last_intentional_move_ts
+    is_user_dragging = True
+    last_intentional_move_ts = time.time()
+    print("[DRAG] BEGIN")
+
+@eel.expose
+def end_user_drag():
+    global is_user_dragging, last_intentional_move_ts
+    is_user_dragging = False
+    last_intentional_move_ts = time.time()
+    print("[DRAG] END")
+
+@eel.expose
 def update_window_pos(window_title, x, y, w, h):
     if x is None or y is None: 
         return 
@@ -576,8 +595,10 @@ def update_window_pos(window_title, x, y, w, h):
     if hwnd != 0:
         flags = 0x0004 | 0x0010 | 0x4000
         win32gui.SetWindowPos(hwnd, 0, int(x), int(y), int(w), int(h), flags)
+        print(f"[UPDATE_POS] ({x},{y})")  # NYTT
 
-        global active_taskbar_game
+        global active_taskbar_game, last_intentional_move_ts
+        last_intentional_move_ts = time.time()
         if active_taskbar_game and active_taskbar_game.get('name') == window_title:
             active_taskbar_game['realX'] = int(x)
             active_taskbar_game['realY'] = int(y)
@@ -1364,24 +1385,41 @@ def taskbar_monitor():
                 has_coords = 'realY' in active_taskbar_game
 
                 drifted = False
-                if has_coords:
+                caption_returned = False
+
+                if has_coords and not is_user_dragging and (time.time() - last_intentional_move_ts) > 1.0:
+                    # Jämför KLIENT-storlek (inre yta) inte FÖNSTER-storlek (med ram).
+                    # När fönstret transitionerar mellan ramad och borderless skiljer de
+                    # sig kort med exakt ram-tjockleken (~16x20 px) — falskt drift.
+                    client_rect = win32gui.GetClientRect(hwnd)
+                    cur_x, cur_y = rect[0], rect[1]
+                    cur_w = client_rect[2]
+                    cur_h = client_rect[3]
+                    if (abs(cur_x - active_taskbar_game['realX']) > 5 or
+                        abs(cur_y - active_taskbar_game['realY']) > 5 or
+                        abs(cur_w - active_taskbar_game['resW'])  > 20 or
+                        abs(cur_h - active_taskbar_game['resH'])  > 20):
+                        drifted = True
+                    if style & WS_CAPTION:
+                        caption_returned = True
+
+                if (caption_returned or drifted) and has_coords:
                     cur_x, cur_y = rect[0], rect[1]
                     cur_w, cur_h = rect[2] - rect[0], rect[3] - rect[1]
-                    if (abs(cur_x - active_taskbar_game['realX']) > 2 or
-                        abs(cur_y - active_taskbar_game['realY']) > 2 or
-                        abs(cur_w - active_taskbar_game['resW'])  > 2 or
-                        abs(cur_h - active_taskbar_game['resH'])  > 2):
-                        drifted = True
-
-                if (style & WS_CAPTION) or drifted:
-                    if has_coords:
-                        force_reapply_borderless(
-                            hwnd,
-                            active_taskbar_game['realX'],
-                            active_taskbar_game['realY'],
-                            active_taskbar_game['resW'],
-                            active_taskbar_game['resH'],
-                        )
+                    time_since = time.time() - last_intentional_move_ts
+                    print(f"[MONITOR] reapply: caption={caption_returned} drifted={drifted} "
+                          f"dragging={is_user_dragging} time_since_move={time_since:.2f}s "
+                          f"target_pos=({active_taskbar_game['realX']},{active_taskbar_game['realY']}) "
+                          f"actual_pos=({cur_x},{cur_y}) "
+                          f"target_size=({active_taskbar_game['resW']}x{active_taskbar_game['resH']}) "
+                          f"actual_size=({cur_w}x{cur_h})")
+                    force_reapply_borderless(
+                        hwnd,
+                        active_taskbar_game['realX'],
+                        active_taskbar_game['realY'],
+                        active_taskbar_game['resW'],
+                        active_taskbar_game['resH'],
+                    )
 
                 foreground_hwnd = win32gui.GetForegroundWindow()
                 if foreground_hwnd == hwnd:
@@ -1428,7 +1466,7 @@ def background_auto_apply_scanner():
 
                 known_auto_applied_games.add(prof_name)
                 if not is_borderless(prof_name):
-                    print(f"Automatisk applicering: {prof_name} från bakgrunden")
+                    print(f"[SCANNER] init_borderless for {prof_name}")
                     init_borderless(prof_name)
                     if profiles[prof_name].get('alwaysOnTop'):
                         set_game_topmost(prof_name, True)
