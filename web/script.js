@@ -824,6 +824,9 @@ function buildMonitorSelector() {
   const map = document.getElementById("monitor-map");
   if (!map || document.getElementById("monitor-selector-bar")) return;
 
+  // Bara en skärm? Då finns inget att välja mellan — visa inget alls.
+  if (allMonitors.length < 2) return;
+
   const bar = document.createElement("div");
   bar.id = "monitor-selector-bar";
 
@@ -837,7 +840,6 @@ function buildMonitorSelector() {
     bar.appendChild(btn);
   });
 
-  // Windows Settings — alltid synlig
   const winBtn = document.createElement("button");
   winBtn.className = "monitor-select-btn monitor-windows-btn";
   winBtn.innerHTML = "Windows Settings";
