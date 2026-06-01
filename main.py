@@ -26,7 +26,7 @@ from tkinter import filedialog
 # 1. GLOBALA VARIABLER & INITIALISERING
 # ==============================================================================================
 
-CURRENT_VERSION = "1.0.9" 
+CURRENT_VERSION = "1.1.0" 
 UPDATE_INFO_URL = "https://raw.githubusercontent.com/HappyHamster135/True-Borders/main/update.json"
 
 tray_icon_instance = None
