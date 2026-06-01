@@ -19,6 +19,10 @@ let currentGameToEdit = "";
 let resizeTimer;
 let lastMouseY = 0; // Håller koll på om vi drar profiler uppåt eller neråt
 
+let allMonitors = [];
+let selectedMonitorIndex = null; // null = fri/custom, -1 = alla skärmar, annars index
+let previousMapState = null;
+
 const MIN_INNER_WIDTH = 880;
 const MIN_INNER_HEIGHT = 750;
 
@@ -27,6 +31,7 @@ const MIN_INNER_HEIGHT = 750;
 // ==========================================================================
 
 async function initMap() {
+  localStorage.removeItem("monitorLayout");
   loadAppVersion();
 
   await eel.set_app_on_top()();
@@ -34,6 +39,7 @@ async function initMap() {
 
   // --- A. RITA KARTAN OCH RÄKNA UT SKALA ---
   const monitors = await eel.get_monitor_layout()();
+  allMonitors = monitors;
   const mapContainer = document.getElementById("monitor-map");
 
   monitors.forEach((m) => {
@@ -65,14 +71,19 @@ async function initMap() {
 
     const monitorDiv = document.createElement("div");
     monitorDiv.className = "monitor";
+    monitorDiv.dataset.monitorIndex = index;
+    monitorDiv.title = `Display ${index + 1} — click to fill`;
     monitorDiv.style.left = `${(m.x - minRealX) * globalScale + offsetX}px`;
     monitorDiv.style.top = `${(m.y - minRealY) * globalScale + offsetY}px`;
     monitorDiv.style.width = `${scaledMonitorW}px`;
     monitorDiv.style.height = `${scaledMonitorH}px`;
-    monitorDiv.innerHTML = `Display ${index + 1} (${m.width}x${m.height})`;
+    monitorDiv.innerHTML = `Display ${index + 1} (${m.width}×${m.height})`;
+    monitorDiv.addEventListener("click", () => toggleMonitorSelection(index));
     mapContainer.appendChild(monitorDiv);
   });
 
+  buildMonitorSelector();
+  loadMonitorLayout();
   // Skapa Drag-boxen (Den gröna/rosa spelytan)
   const dragBox = document.createElement("div");
   dragBox.id = "drag-box";
@@ -126,43 +137,43 @@ async function initMap() {
       if (!gameName || gameName === "Select a game...") {
         isCurrentlyBorderlessSession = false;
         triggerText.innerHTML = "Select a game...";
-        // Återställ knappen om man avmarkerar ett spel
         document.getElementById("btnApply").innerText = "APPLY BORDERLESS";
         return;
       }
 
-      // Uppdatera visuell text och ikon
-      const iconBase64 = await eel.get_window_icon_base64(gameName)();
+      // NYTT: översätt slumpad live-titel -> rätt profilnyckel (utan att trigga change igen)
+      let profileKey = gameName;
+      try {
+        const resolved = await eel.resolve_profile_name(gameName)();
+        if (resolved && resolved !== gameName) {
+          profileKey = resolved;
+          e.target.value = profileKey;
+        }
+      } catch (err) {}
+
+      const iconBase64 = await eel.get_window_icon_base64(profileKey)();
       let iconHtml = iconBase64
         ? `<img src="${iconBase64}" class="window-icon">`
         : `<div style="width:18px; height:18px; margin-right:8px;"></div>`;
-      triggerText.innerHTML = `${iconHtml} <span>${gameName}</span>`;
+      triggerText.innerHTML = `${iconHtml} <span>${profileKey}</span>`;
 
-      localStorage.setItem("windowName", gameName);
+      localStorage.setItem("windowName", profileKey);
 
-      // Hämtar profilen
-      const profile = await eel.get_profile(gameName)();
-
-      // --- FIXEN: Skottsäker check ---
+      const profile = await eel.get_profile(profileKey)();
       const btnApply = document.getElementById("btnApply");
 
-      // Vi kollar inte bara om profilen finns, vi kollar om den faktiskt har en sparad bredd (resW)!
       if (profile && profile.resW !== undefined) {
         btnApply.innerText = "SAVE TO PROFILE";
       } else {
         btnApply.innerText = "APPLY BORDERLESS";
       }
-      // --------------------------------
 
-      const isAlreadyBorderless = await eel.is_borderless(gameName)();
+      const isAlreadyBorderless = await eel.is_borderless(profileKey)();
       isCurrentlyBorderlessSession = isAlreadyBorderless;
 
-      // --- FIXEN: Läs av verkligheten! ---
-      // Fråga Python exakt var fönstret befinner sig just nu
-      const actualPos = await eel.get_actual_window_pos(gameName)();
+      const actualPos = await eel.get_actual_window_pos(profileKey)();
 
       if (profile || actualPos) {
-        // Använd den faktiska bredden/höjden om spelet är igång, annars fall tillbaka på profilen
         let useW =
           profile && profile.resW
             ? profile.resW
@@ -186,7 +197,6 @@ async function initMap() {
         if (typeof setPresetValue === "function")
           setPresetValue(optionExists ? presetVal : "custom");
 
-        // Vart är rutan rent fysiskt just nu? (Litar på actualPos i första hand)
         let posX =
           profile && profile.realX !== undefined
             ? profile.realX
@@ -202,23 +212,17 @@ async function initMap() {
 
         const dBox = document.getElementById("drag-box");
         if (posX !== undefined && posY !== undefined && dBox) {
-          // Sätt positionen FÖRST...
           const newUIX = (posX - minRealX) * globalScale + offsetX;
           const newUIY = (posY - minRealY) * globalScale + offsetY;
           dBox.style.left = newUIX + "px";
           dBox.style.top = newUIY + "px";
         }
 
-        // ...och räkna ut storleken SEDAN!
         updateDragBoxSize();
-
-        // VIKTIGT: Jag har tagit bort "triggerRealTimeMove" härifrån.
-        // Tidigare tvingade UI:t fönstret att hoppa när det laddades in.
-        // Nu "speglar" UI:t bara verkligheten istället.
 
         const statusEl = document.getElementById("status-polished");
         if (statusEl) {
-          statusEl.innerText = `Profile loaded: ${gameName}`;
+          statusEl.innerText = `Profile loaded: ${profileKey}`;
           statusEl.style.color = "var(--accent-1)";
         }
       }
@@ -248,6 +252,7 @@ async function initMap() {
     const inputEl = document.getElementById(id);
 
     inputEl.addEventListener("input", () => {
+      clearMonitorSelection();
       if (typeof setPresetValue === "function") setPresetValue("custom");
       updateDragBoxSize();
       triggerRealTimeMove(document.getElementById("drag-box"));
@@ -406,6 +411,150 @@ async function initMap() {
   }, 2500);
 
   setInterval(autoApplyScanner, 2000);
+  window.addEventListener("focus", () => {
+    if (typeof refreshMonitorLayout === "function") refreshMonitorLayout();
+  });
+}
+
+async function refreshMonitorLayout() {
+  const monitors = await eel.get_monitor_layout()();
+  const map = document.getElementById("monitor-map");
+  if (!map) return;
+
+  // Nollställ skala-räknarna
+  minRealX = 0;
+  minRealY = 0;
+  monitors.forEach((m) => {
+    if (m.x < minRealX) minRealX = m.x;
+    if (m.y < minRealY) minRealY = m.y;
+  });
+
+  let maxRealX = -Infinity,
+    maxRealY = -Infinity;
+  monitors.forEach((m) => {
+    if (m.x + m.width > maxRealX) maxRealX = m.x + m.width;
+    if (m.y + m.height > maxRealY) maxRealY = m.y + m.height;
+  });
+  realMonitorW = maxRealX - minRealX;
+  realMonitorH = maxRealY - minRealY;
+
+  const padding = 20;
+  const sx = (map.clientWidth - padding * 2) / realMonitorW;
+  const sy = (map.clientHeight - padding * 2) / realMonitorH;
+  globalScale = Math.min(sx, sy);
+  offsetX = (map.clientWidth - realMonitorW * globalScale) / 2;
+  offsetY = (map.clientHeight - realMonitorH * globalScale) / 2;
+
+  // Ta bort gamla monitor-divs (behåll drag-boxen!)
+  map.querySelectorAll(".monitor").forEach((d) => d.remove());
+
+  allMonitors = monitors;
+  monitors.forEach((m, index) => {
+    scaledMonitorW = m.width * globalScale;
+    scaledMonitorH = m.height * globalScale;
+
+    const d = document.createElement("div");
+    d.className = "monitor";
+    d.dataset.monitorIndex = index;
+    d.title = `Display ${index + 1} — click to fill`;
+    d.style.left = `${(m.x - minRealX) * globalScale + offsetX}px`;
+    d.style.top = `${(m.y - minRealY) * globalScale + offsetY}px`;
+    d.style.width = `${scaledMonitorW}px`;
+    d.style.height = `${scaledMonitorH}px`;
+    d.innerHTML = `Display ${index + 1} (${m.width}×${m.height})`;
+    d.addEventListener("click", () => toggleMonitorSelection(index));
+    map.appendChild(d);
+  });
+
+  // Bygg om selector-baren
+  const oldBar = document.getElementById("monitor-selector-bar");
+  if (oldBar) oldBar.remove();
+  buildMonitorSelector();
+
+  // Skala om drag-rutan i nya koordinatsystemet
+  updateDragBoxSize();
+  updateMonitorHighlight();
+}
+
+function makeMonitorDraggable(div, index) {
+  div.addEventListener("mousedown", (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation(); // hindra drag-boxens lyssnare om de råkar överlappa
+
+    const startX = e.clientX,
+      startY = e.clientY;
+    const startLeft = parseFloat(div.style.left);
+    const startTop = parseFloat(div.style.top);
+    const map = document.getElementById("monitor-map");
+    let moved = false;
+
+    function onMove(ev) {
+      const dx = ev.clientX - startX;
+      const dy = ev.clientY - startY;
+
+      if (!moved && Math.hypot(dx, dy) > 4) {
+        moved = true;
+        div.style.cursor = "grabbing";
+        div.style.zIndex = "5";
+        div.style.opacity = "0.85";
+      }
+      if (!moved) return;
+
+      let nl = startLeft + dx,
+        nt = startTop + dy;
+      const maxL = map.clientWidth - div.offsetWidth;
+      const maxT = map.clientHeight - div.offsetHeight;
+      if (nl < 0) nl = 0;
+      else if (nl > maxL) nl = maxL;
+      if (nt < 0) nt = 0;
+      else if (nt > maxT) nt = maxT;
+      div.style.left = nl + "px";
+      div.style.top = nt + "px";
+    }
+
+    function onUp() {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      div.style.cursor = "";
+      div.style.zIndex = "";
+      div.style.opacity = "";
+
+      if (moved) {
+        saveMonitorLayout();
+        // Om den flyttade monitorn just är vald, följ med
+        if (selectedMonitorIndex === index) selectMonitor(index);
+      } else {
+        toggleMonitorSelection(index);
+      }
+    }
+
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  });
+}
+
+function saveMonitorLayout() {
+  const layout = {};
+  document.querySelectorAll("#monitor-map .monitor").forEach((d) => {
+    layout[d.dataset.monitorIndex] = { left: d.style.left, top: d.style.top };
+  });
+  localStorage.setItem("monitorLayout", JSON.stringify(layout));
+}
+
+function loadMonitorLayout() {
+  try {
+    const raw = localStorage.getItem("monitorLayout");
+    if (!raw) return;
+    const layout = JSON.parse(raw);
+    document.querySelectorAll("#monitor-map .monitor").forEach((d) => {
+      const saved = layout[d.dataset.monitorIndex];
+      if (saved) {
+        d.style.left = saved.left;
+        d.style.top = saved.top;
+      }
+    });
+  } catch (e) {}
 }
 
 async function selectGameInVisualMap(winName) {
@@ -545,8 +694,8 @@ function triggerRealTimeMove(elmnt, exactTop = null, exactLeft = null) {
   const realMaxX = minRealX + realMonitorW - resW;
   const realMaxY = minRealY + realMonitorH - resH;
 
-  const maxTop = offsetY + scaledMonitorH - resH * globalScale;
-  const maxLeft = offsetX + scaledMonitorW - resW * globalScale;
+  const maxTop = offsetY + realMonitorH * globalScale - resH * globalScale;
+  const maxLeft = offsetX + realMonitorW * globalScale - resW * globalScale;
 
   if (calcTop >= maxTop - 0.5) realY = realMaxY;
   if (calcLeft >= maxLeft - 0.5) realX = realMaxX;
@@ -564,6 +713,7 @@ function makeDraggable(elmnt) {
 
   elmnt.onmousedown = function (e) {
     e.preventDefault();
+    clearMonitorSelection();
     pos3 = e.clientX;
     pos4 = e.clientY;
     document.onmouseup = closeDragElement;
@@ -586,8 +736,8 @@ function makeDraggable(elmnt) {
     const exactW = resW * globalScale;
     const exactH = resH * globalScale;
 
-    let maxLeft = offsetX + scaledMonitorW - exactW;
-    let maxTop = offsetY + scaledMonitorH - exactH;
+    let maxLeft = offsetX + realMonitorW * globalScale - exactW;
+    let maxTop = offsetY + realMonitorH * globalScale - exactH;
 
     if (maxLeft < offsetX) maxLeft = offsetX;
     if (maxTop < offsetY) maxTop = offsetY;
@@ -667,6 +817,139 @@ function nudgeBox(dx, dy) {
     isCurrentlyBorderlessSession
   ) {
     if (typeof autoSaveCurrentState === "function") autoSaveCurrentState();
+  }
+}
+
+function buildMonitorSelector() {
+  const map = document.getElementById("monitor-map");
+  if (!map || document.getElementById("monitor-selector-bar")) return;
+
+  const bar = document.createElement("div");
+  bar.id = "monitor-selector-bar";
+
+  allMonitors.forEach((m, i) => {
+    const btn = document.createElement("button");
+    btn.className = "monitor-select-btn";
+    btn.dataset.monitorIndex = i;
+    btn.innerHTML = `Display ${i + 1}${m.is_primary ? " ★" : ""}`;
+    btn.title = `${m.width}×${m.height}`;
+    btn.addEventListener("click", () => toggleMonitorSelection(i));
+    bar.appendChild(btn);
+  });
+
+  // Windows Settings — alltid synlig
+  const winBtn = document.createElement("button");
+  winBtn.className = "monitor-select-btn monitor-windows-btn";
+  winBtn.innerHTML = "Windows Settings";
+  winBtn.title = "Open Windows display arrangement";
+  winBtn.addEventListener("click", openDisplaySettings);
+  bar.appendChild(winBtn);
+
+  map.parentNode.insertBefore(bar, map);
+}
+
+async function openDisplaySettings() {
+  try {
+    await eel.open_windows_display_settings()();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+function selectMonitor(index) {
+  const m = allMonitors[index];
+  const monitorDiv = document.querySelector(
+    `.monitor[data-monitor-index="${index}"]`,
+  );
+  if (!m || !monitorDiv) return;
+
+  selectedMonitorIndex = index;
+  document.getElementById("resW").value = m.width;
+  document.getElementById("resH").value = m.height;
+
+  const dragBox = document.getElementById("drag-box");
+  // Använd monitorns nuvarande position i kartan, inte Windows ursprungliga
+  dragBox.style.left = monitorDiv.style.left;
+  dragBox.style.top = monitorDiv.style.top;
+
+  const presetVal = `${m.width}x${m.height}`;
+  const opt = document.querySelector(
+    `#preset-options .custom-option[data-value="${presetVal}"]`,
+  );
+  if (typeof setPresetValue === "function")
+    setPresetValue(opt ? presetVal : "custom");
+
+  updateDragBoxSize();
+  updateMonitorHighlight();
+  triggerRealTimeMove(dragBox);
+}
+
+function snapshotMapState() {
+  const dragBox = document.getElementById("drag-box");
+  return {
+    resW: parseInt(document.getElementById("resW").value),
+    resH: parseInt(document.getElementById("resH").value),
+    left: dragBox.style.left,
+    top: dragBox.style.top,
+  };
+}
+
+function restoreMapState() {
+  if (!previousMapState) return false;
+  const s = previousMapState;
+  const dragBox = document.getElementById("drag-box");
+
+  document.getElementById("resW").value = s.resW;
+  document.getElementById("resH").value = s.resH;
+  dragBox.style.left = s.left;
+  dragBox.style.top = s.top;
+
+  selectedMonitorIndex = null;
+  previousMapState = null;
+
+  const presetVal = `${s.resW}x${s.resH}`;
+  const opt = document.querySelector(
+    `#preset-options .custom-option[data-value="${presetVal}"]`,
+  );
+  if (typeof setPresetValue === "function")
+    setPresetValue(opt ? presetVal : "custom");
+
+  updateDragBoxSize();
+  updateMonitorHighlight();
+  triggerRealTimeMove(dragBox);
+  return true;
+}
+
+function toggleMonitorSelection(index) {
+  if (selectedMonitorIndex === index) {
+    restoreMapState();
+    return;
+  }
+  previousMapState = snapshotMapState();
+  selectMonitor(index);
+}
+
+function updateMonitorHighlight() {
+  document.querySelectorAll("#monitor-map .monitor").forEach((el) => {
+    const idx = parseInt(el.dataset.monitorIndex);
+    const on = selectedMonitorIndex === -1 || selectedMonitorIndex === idx;
+    el.classList.toggle("monitor-selected", on);
+  });
+  document.querySelectorAll(".monitor-select-btn").forEach((btn) => {
+    const idx = btn.dataset.monitorIndex;
+    const isAll = btn.classList.contains("monitor-select-all");
+    const on =
+      (isAll && selectedMonitorIndex === -1) ||
+      (!isAll && parseInt(idx) === selectedMonitorIndex);
+    btn.classList.toggle("active", on);
+  });
+}
+
+function clearMonitorSelection() {
+  if (selectedMonitorIndex !== null) {
+    selectedMonitorIndex = null;
+    previousMapState = null;
+    updateMonitorHighlight();
   }
 }
 
@@ -873,6 +1156,35 @@ function showTab(tabName) {
   }
 }
 
+function prettifyGameName(rawName) {
+  if (!rawName) return rawName;
+  let s = rawName;
+
+  // (Early Access), [Beta], (Demo), (Alpha), (Preview) m.fl.
+  s = s.replace(
+    /[\(\[\{]\s*(early[\s\-]?access|beta|alpha|demo|preview|test(ing)?|public test|experimental|nightly|dev|ea)\s*[\)\]\}]/gi,
+    " ",
+  );
+
+  // "Early Access" utan parenteser
+  s = s.replace(/\bearly[\s\-]?access\b/gi, " ");
+
+  // Versioner: ver.0.9.2.2, v9, v1.2.3, version 1.0, v.1.0
+  s = s.replace(/\b(v|ver|version)\.?\s*\d+(\.\d+)*\b/gi, " ");
+
+  // Bara siffer-versioner: 1.4.5.6, 0.9.2 (minst en punkt)
+  s = s.replace(/\b\d+(\.\d+){1,}\b/g, " ");
+
+  // Städa kvarvarande skiljetecken & blanksteg
+  s = s.replace(/\(\s*\)|\[\s*\]|\{\s*\}/g, " "); // tomma parenteser
+  s = s.replace(/\s*[-–—:•|]+\s*$/g, ""); // skräp i slutet
+  s = s.replace(/^\s*[-–—:•|]+\s*/g, ""); // skräp i början
+  s = s.replace(/\s*([-–—:•|])\s*(?:[-–—:•|]\s*)+/g, " $1 "); // dubbletter
+  s = s.replace(/\s{2,}/g, " ").trim();
+
+  return s.length ? s : rawName.trim(); // föll allt bort? behåll originalet
+}
+
 async function loadProfilesTab() {
   const profiles = await eel.get_all_profiles()();
   const list = document.getElementById("profile-list");
@@ -888,6 +1200,7 @@ async function loadProfilesTab() {
       ? `<img src="${iconBase64}" class="window-icon" style="width: 16px; height: 16px; margin-right: 8px;">`
       : "";
 
+    const displayName = prettifyGameName(name);
     const card = document.createElement("div");
     card.className = "profile-card";
     card.draggable = true;
@@ -896,7 +1209,7 @@ async function loadProfilesTab() {
     card.innerHTML = `
             <div class="drag-handle">⋮⋮</div>
             <div class="profile-info">
-                <h3>${iconHtml}${name}</h3>
+                <h3 title="${name}">${iconHtml}${displayName}</h3>
                 <p>${p.resW}x${p.resH}</p>
             </div>
             <div class="profile-actions">
@@ -945,6 +1258,7 @@ async function handleToggle(event, name) {
       }
       return;
     }
+    await maybeWarnTerrariaDisplay(name);
   }
 
   let status = await eel.toggle_borderless(name)();
@@ -1124,37 +1438,145 @@ if (profileList) {
   });
 }
 
-window.addEventListener("dragover", (e) => {
-  e.preventDefault();
-  e.dataTransfer.dropEffect = "move";
-
+// Delad reorder-logik: anropas både av dragover OCH av auto-scroll-loopen.
+function repositionDraggingCard(clientY, forcedDown = null) {
   const dragging = document.querySelector(".dragging");
-  const profileListObj = document.getElementById("profile-list");
+  const listObj = document.getElementById("profile-list");
+  if (!dragging || !listObj) return;
 
-  if (!dragging || !profileListObj) return;
-
-  const isDraggingDown = e.clientY > lastMouseY;
-  lastMouseY = e.clientY;
+  // Under auto-scroll står markören stilla, så vi tvingar riktning från scrollen.
+  const isDraggingDown =
+    forcedDown !== null ? forcedDown : clientY > lastMouseY;
+  lastMouseY = clientY;
 
   const siblings = [
-    ...profileListObj.querySelectorAll(".profile-card:not(.dragging)"),
+    ...listObj.querySelectorAll(".profile-card:not(.dragging)"),
   ];
 
-  let nextSibling = siblings.find((sibling) => {
+  const nextSibling = siblings.find((sibling) => {
     const box = sibling.getBoundingClientRect();
     const sensitivity = isDraggingDown ? 0.25 : 0.75;
-    const triggerPoint = box.top + box.height * sensitivity;
-    return e.clientY < triggerPoint;
+    return clientY < box.top + box.height * sensitivity;
   });
 
   if (nextSibling) {
     if (nextSibling !== dragging.nextSibling) {
-      profileListObj.insertBefore(dragging, nextSibling);
+      listObj.insertBefore(dragging, nextSibling);
     }
   } else {
-    profileListObj.appendChild(dragging);
+    listObj.appendChild(dragging);
+  }
+}
+
+window.addEventListener("dragover", (e) => {
+  e.preventDefault();
+  if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+
+  const dragging = document.querySelector(".dragging");
+  if (!dragging) return;
+
+  dragScrollPointerY = e.clientY; // mata kant-scrollern med musens läge
+  repositionDraggingCard(e.clientY);
+});
+
+// ---- AUTO-SCROLL VID DRAG TILL KANTEN ----
+let dragScrollRAF = null;
+let dragScrollPointerY = 0;
+let dragScrollContainer = null;
+
+const EDGE_ZONE = 90; // px från kanten där scroll börjar
+const MAX_SCROLL_SPEED = 16; // px per frame (~60fps)
+
+// Hittar den faktiska scrollbara behållaren (listan, en wrapper, eller hela sidan)
+function getScrollParent(el) {
+  let node = el;
+  while (node && node !== document.body && node !== document.documentElement) {
+    const oy = getComputedStyle(node).overflowY;
+    if (
+      (oy === "auto" || oy === "scroll" || oy === "overlay") &&
+      node.scrollHeight > node.clientHeight
+    ) {
+      return node;
+    }
+    node = node.parentElement;
+  }
+  return document.scrollingElement || document.documentElement;
+}
+
+function startDragAutoScroll() {
+  dragScrollContainer = getScrollParent(
+    document.getElementById("profile-list"),
+  );
+  if (dragScrollRAF === null) {
+    dragScrollRAF = requestAnimationFrame(dragAutoScrollStep);
+  }
+}
+
+function dragAutoScrollStep() {
+  const dragging = document.querySelector(".dragging");
+  const container = dragScrollContainer;
+
+  if (!dragging || !container) {
+    dragScrollRAF = null;
+    return;
+  }
+
+  // Kant-koordinater för behållaren (eller hela viewporten om sidan scrollar)
+  const isPageScroll =
+    container === document.scrollingElement ||
+    container === document.documentElement ||
+    container === document.body;
+
+  let top, bottom;
+  if (isPageScroll) {
+    top = 0;
+    bottom = window.innerHeight;
+  } else {
+    const r = container.getBoundingClientRect();
+    top = r.top;
+    bottom = r.bottom;
+  }
+
+  let dy = 0;
+  if (dragScrollPointerY < top + EDGE_ZONE) {
+    dy =
+      -MAX_SCROLL_SPEED *
+      Math.min(1, (top + EDGE_ZONE - dragScrollPointerY) / EDGE_ZONE);
+  } else if (dragScrollPointerY > bottom - EDGE_ZONE) {
+    dy =
+      MAX_SCROLL_SPEED *
+      Math.min(1, (dragScrollPointerY - (bottom - EDGE_ZONE)) / EDGE_ZONE);
+  }
+
+  if (dy !== 0) {
+    const before = container.scrollTop;
+    container.scrollTop += dy;
+    // Bara om vi faktiskt scrollade (inte redan i botten/toppen): flytta kortet
+    if (container.scrollTop !== before) {
+      repositionDraggingCard(dragScrollPointerY, dy > 0);
+    }
+  }
+
+  dragScrollRAF = requestAnimationFrame(dragAutoScrollStep);
+}
+
+function stopDragAutoScroll() {
+  if (dragScrollRAF !== null) {
+    cancelAnimationFrame(dragScrollRAF);
+    dragScrollRAF = null;
+  }
+  dragScrollContainer = null;
+}
+
+// Starta/stoppa loopen i takt med dragen
+window.addEventListener("dragstart", (e) => {
+  if (e.target.closest && e.target.closest(".profile-card")) {
+    dragScrollPointerY = e.clientY; // säkerställ ett startvärde direkt
+    startDragAutoScroll();
   }
 });
+window.addEventListener("dragend", stopDragAutoScroll);
+window.addEventListener("drop", stopDragAutoScroll);
 
 window.addEventListener("dragenter", (e) => {
   e.preventDefault();
@@ -1583,58 +2005,52 @@ window.onclick = function (event) {
 
 async function autoApplyScanner() {
   const profiles = await eel.get_all_profiles()();
-  const openWindows = await eel.get_open_windows()();
+  const runningKeys = await eel.get_running_profile_names()();
+  const runningSet = new Set(runningKeys);
   const hiddenInput = document.getElementById("window_title_input");
 
-  // 1. Kollar om spel har stängts
-  for (let game of knownRunningGames) {
-    if (!openWindows.includes(game)) {
+  // 1. Spel som stängts (jämför på profilnyckel)
+  for (let game of [...knownRunningGames]) {
+    if (!runningSet.has(game)) {
       knownRunningGames.delete(game);
       manuallyRestoredGames.delete(game);
-
-      // --- FIXEN: Slå AV knappen om spelet stängs! ---
       const toggleBtn = document.getElementById(`toggle-${game}`);
       if (toggleBtn) toggleBtn.checked = false;
     }
   }
 
-  for (const win of openWindows) {
-    if (profiles[win]) {
-      if (
-        !hiddenInput.value ||
-        hiddenInput.value === "" ||
-        hiddenInput.value === "Select a game..."
-      ) {
-        await selectGameInVisualMap(win);
-      }
+  // 2. Spel som körs nu
+  for (const key of runningKeys) {
+    if (
+      !hiddenInput.value ||
+      hiddenInput.value === "" ||
+      hiddenInput.value === "Select a game..."
+    ) {
+      await selectGameInVisualMap(key);
+    }
 
-      if (!knownRunningGames.has(win) && !manuallyRestoredGames.has(win)) {
-        knownRunningGames.add(win);
+    if (!knownRunningGames.has(key) && !manuallyRestoredGames.has(key)) {
+      knownRunningGames.add(key);
 
-        const isBorderless = await eel.is_borderless(win)();
-        if (!isBorderless) {
-          await eel.init_borderless(win)();
-          await selectGameInVisualMap(win);
+      const isBorderless = await eel.is_borderless(key)();
+      if (!isBorderless) {
+        await eel.init_borderless(key)();
+        await selectGameInVisualMap(key);
 
-          const p = profiles[win];
-          if (p && p.alwaysOnTop) {
-            await eel.set_game_topmost(win, true)();
-          }
+        const p = profiles[key];
+        if (p && p.alwaysOnTop) await eel.set_game_topmost(key, true)();
 
-          // --- FIXEN: Slå PÅ knappen när spelet startas! ---
-          const toggleBtn = document.getElementById(`toggle-${win}`);
-          if (toggleBtn) toggleBtn.checked = true;
+        const toggleBtn = document.getElementById(`toggle-${key}`);
+        if (toggleBtn) toggleBtn.checked = true;
 
-          const statusEl = document.getElementById("status-polished");
-          if (statusEl) {
-            statusEl.innerText = `Auto-applied: ${win}`;
-            statusEl.style.color = "var(--accent-1)";
-          }
-        } else {
-          // Om det REDAN var borderless när appen upptäcker det, se till att knappen lyser
-          const toggleBtn = document.getElementById(`toggle-${win}`);
-          if (toggleBtn) toggleBtn.checked = true;
+        const statusEl = document.getElementById("status-polished");
+        if (statusEl) {
+          statusEl.innerText = `Auto-applied: ${key}`;
+          statusEl.style.color = "var(--accent-1)";
         }
+      } else {
+        const toggleBtn = document.getElementById(`toggle-${key}`);
+        if (toggleBtn) toggleBtn.checked = true;
       }
     }
   }
@@ -1686,6 +2102,25 @@ window.addEventListener("resize", () => {
     }
   }, 150);
 });
+
+async function maybeWarnTerrariaDisplay(name) {
+  try {
+    const st = await eel.get_terraria_display_status(name)();
+    if (st && st.is_terraria && st.needs_fix) {
+      const statusEl = document.getElementById("status-polished");
+      if (statusEl) {
+        statusEl.innerText =
+          `⚠️ ${name} kör i spelets eget borderless/fullscreen-läge. ` +
+          `Stäng spelet och starta det via ▶ — då sätts windowed automatiskt.`;
+        statusEl.style.color = "var(--accent-2)";
+      }
+      // Förbered config så nästa launch blir windowed
+      await eel.ensure_terraria_windowed(name)();
+      return true;
+    }
+  } catch (err) {}
+  return false;
+}
 
 // App-kontroller (Exit & Göm)
 function closeApp() {

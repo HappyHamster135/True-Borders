@@ -2,7 +2,6 @@ import eel
 import win32gui
 import win32con
 import win32ui
-import win32api
 import win32process
 import ctypes
 from ctypes import wintypes
@@ -180,10 +179,16 @@ def launch_game(game_name):
     profile = get_profile(game_name)
     if not profile or 'exePath' not in profile:
         return False
-        
+
     exe_path = profile['exePath']
     if os.path.exists(exe_path):
         try:
+            # Tvinga Terraria till windowed INNAN start (config skrivs medan spelet är stängt)
+            try:
+                force_terraria_windowed(game_name)
+            except Exception:
+                pass
+
             working_dir = os.path.dirname(exe_path)
             subprocess.Popen([exe_path], cwd=working_dir)
             return True
@@ -217,26 +222,158 @@ def update_exe_path(game_name, new_path):
 # 3. KÄRNFUNKTIONER FÖR BORDERLESS
 # ==============================================================================================
 
+def _get_window_exe_path(hwnd):
+    """Returnerar full sökväg till .exe-filen som äger ett fönster (eller None)."""
+    try:
+        _, pid = win32process.GetWindowThreadProcessId(hwnd)
+        if not pid:
+            return None
+        h_process = ctypes.windll.kernel32.OpenProcess(0x1000, False, pid)  # QUERY_LIMITED_INFORMATION
+        if not h_process:
+            return None
+        try:
+            exe_buffer = ctypes.create_unicode_buffer(260)
+            size = wintypes.DWORD(260)
+            if ctypes.windll.kernel32.QueryFullProcessImageNameW(h_process, 0, exe_buffer, ctypes.byref(size)):
+                return exe_buffer.value
+        finally:
+            ctypes.windll.kernel32.CloseHandle(h_process)
+    except Exception:
+        pass
+    return None
+
+
+def _enum_candidate_windows():
+    """Listar synliga 'riktiga' fönster (rimlig storlek, har titel)."""
+    candidates = []
+    def cb(hwnd, _):
+        if not win32gui.IsWindowVisible(hwnd):
+            return True
+        title = win32gui.GetWindowText(hwnd).strip()
+        if not title or title in EXACT_IGNORE:
+            return True
+        rect = win32gui.GetWindowRect(hwnd)
+        w, h = rect[2] - rect[0], rect[3] - rect[1]
+        if w > 100 and h > 100:
+            candidates.append((hwnd, title, w * h))
+        return True
+    win32gui.EnumWindows(cb, None)
+    return candidates
+
+
+@eel.expose
+def resolve_profile_name(window_title):
+    """Översätter en (möjligen slumpad) live-fönstertitel till namnet på den
+    sparade profil som hör till samma fönster (via exe/ikon). Returnerar
+    titeln själv om den redan är en profilnyckel, annars None."""
+    profiles = get_all_profiles()
+    if not profiles:
+        return None
+    if window_title in profiles:
+        return window_title
+
+    live_hwnd = find_real_game_window(window_title)  # fallback-sökning på titel
+    if not live_hwnd:
+        return None
+
+    for name in profiles:
+        if find_window_for_profile(name, profiles) == live_hwnd:
+            return name
+    return None
+
+
+@eel.expose
+def get_running_profile_names():
+    """Returnerar profilnamn som just nu har ett levande fönster (via exe/ikon),
+    så det funkar även för spel som bytt fönstertitel (t.ex. Terraria)."""
+    profiles = get_all_profiles()
+    return [name for name in profiles if find_window_for_profile(name, profiles)]
+
+
+def find_window_for_profile(profile_name, profiles=None):
+    """Hittar det levande fönstret för en sparad profil – robust mot spel som
+    byter fönstertitel (t.ex. Terraria, vars titel kan bli vad som helst).
+
+    Poäng per kandidatfönster:
+      exakt exe-sökväg  -> starkast (titel-oberoende)
+      samma exe-filnamn -> näst starkast
+      ikon matchar      -> reserv om exe saknas
+      titel matchar     -> snabb men opålitlig för spel med slumpad titel
+    """
+    if profiles is None:
+        profiles = get_all_profiles()
+    profile = profiles.get(profile_name) or {}
+
+    candidates = _enum_candidate_windows()
+    if not candidates:
+        return 0
+
+    name_l = (profile_name or "").strip().lower()
+    saved_exe = profile.get('exePath')
+    saved_exe_norm = os.path.normcase(saved_exe) if saved_exe else None
+    saved_exe_base = os.path.basename(saved_exe).lower() if saved_exe else None
+    saved_icon = profile.get('icon')
+
+    best_hwnd, best_score, best_area = 0, -1, -1
+
+    for hwnd, title, area in candidates:
+        title_l = title.lower()
+        score = 0
+
+        # 1) Titel (snabb men opålitlig)
+        if name_l and title_l == name_l:
+            score += 100
+        elif name_l and (name_l in title_l or title_l in name_l):
+            score += 60
+
+        # 2) Exe-sökväg (titel-oberoende, starkaste signalen)
+        if saved_exe_norm:
+            win_exe = _get_window_exe_path(hwnd)
+            if win_exe:
+                if os.path.normcase(win_exe) == saved_exe_norm:
+                    score += 250
+                elif os.path.basename(win_exe).lower() == saved_exe_base:
+                    score += 180
+
+        # 3) Ikon (endast reserv när profilen saknar exe-sökväg)
+        if saved_icon and not saved_exe_norm and score < 60:
+            if get_icon_base64(hwnd) == saved_icon:
+                score += 150
+
+        if score > best_score or (score == best_score and area > best_area):
+            best_hwnd, best_score, best_area = hwnd, score, area
+
+    # Minsta säkerhet så vi aldrig kapar ett orelaterat fönster.
+    return best_hwnd if best_score >= 60 else 0
+
+
 def find_real_game_window(search_title):
-    """Söker efter spelfönstret genom att titta på fönstrets storlek och titel för att undvika skräpfönster."""
+    """Hittar spelfönstret. Matchar titeln en sparad profil används robust
+    profilmatchning (exe/ikon) som klarar spel som byter titel (t.ex. Terraria)."""
+    try:
+        profiles = get_all_profiles()
+        if search_title in profiles:
+            hwnd = find_window_for_profile(search_title, profiles)
+            if hwnd:
+                return hwnd
+    except Exception:
+        pass
+
+    # Fallback: ren titelsökning (för fönster utan sparad profil, t.ex. när man
+    # listar igång spel för att skapa en ny profil).
     found_hwnds = []
-    
     def callback(hwnd, _):
         if win32gui.IsWindowVisible(hwnd):
             title = win32gui.GetWindowText(hwnd).strip()
             if search_title.lower() in title.lower():
                 rect = win32gui.GetWindowRect(hwnd)
-                w = rect[2] - rect[0]
-                h = rect[3] - rect[1]
+                w, h = rect[2] - rect[0], rect[3] - rect[1]
                 if w > 100 and h > 100:
                     found_hwnds.append((hwnd, w * h))
-        return True 
-        
+        return True
     win32gui.EnumWindows(callback, None)
-    
     if not found_hwnds:
         return 0
-        
     found_hwnds.sort(key=lambda x: x[1], reverse=True)
     return found_hwnds[0][0]
 
@@ -762,6 +899,19 @@ def set_game_topmost(window_title, is_topmost):
         win32gui.SetWindowPos(hwnd, z_order, 0, 0, 0, 0, 3)
 
 @eel.expose
+def open_windows_display_settings():
+    """Öppnar Windows skärmlayout-inställningar."""
+    try:
+        os.startfile("ms-settings:display")
+        return True
+    except Exception:
+        try:
+            subprocess.Popen(["explorer.exe", "ms-settings:display"])
+            return True
+        except Exception:
+            return False
+
+@eel.expose
 def toggle_windows_optimizations(enable=True):
     reg_path = r"Software\Microsoft\DirectX\UserGpuPreferences"
     try:
@@ -855,38 +1005,38 @@ def set_custom_hotkey(hotkey_str, enable):
 
 def hotkey_action():
     global hotkey_enabled, active_taskbar_game
-    if not hotkey_enabled: 
+    if not hotkey_enabled:
         return
 
     if active_taskbar_game is not None:
         game_name = active_taskbar_game['name']
         toggle_borderless(game_name)
-        try: 
+        try:
             eel.update_switch_from_python(game_name, False)
-        except Exception: 
+        except Exception:
             pass
         return
 
     profiles = get_all_profiles()
-    hwnd = win32gui.GetForegroundWindow()
-    active_title = win32gui.GetWindowText(hwnd).strip()
-    
-    if active_title in profiles:
-        toggle_borderless(active_title)
-        try: 
-            eel.update_switch_from_python(active_title, True)
-        except Exception: 
-            pass
+    if not profiles:
         return
-        
-    open_windows = get_open_windows()
-    for window in open_windows:
-        if window in profiles:
-            toggle_borderless(window)
-            try: 
-                eel.update_switch_from_python(window, True)
-            except Exception: 
-                pass
+
+    fg_hwnd = win32gui.GetForegroundWindow()
+
+    # 1) Prioritera profilen vars fönster ligger i förgrunden
+    for prof_name in profiles:
+        if fg_hwnd and find_window_for_profile(prof_name, profiles) == fg_hwnd:
+            toggle_borderless(prof_name)
+            try: eel.update_switch_from_python(prof_name, True)
+            except Exception: pass
+            return
+
+    # 2) Annars första profilen med ett levande fönster
+    for prof_name in profiles:
+        if find_window_for_profile(prof_name, profiles):
+            toggle_borderless(prof_name)
+            try: eel.update_switch_from_python(prof_name, True)
+            except Exception: pass
             return
 
 try: 
@@ -1001,6 +1151,92 @@ def apply_paradox_resolution(game_title, width, height):
     success, msg = update_paradox_resolution(game_title, int(width), int(height))
     return {"success": success, "message": msg}
 
+
+# ==============================================================================================
+# 5.6 TERRARIA-INTEGRATION (config.json display mode -> tvinga äkta windowed)
+# ==============================================================================================
+
+def _exe_basename_for_game(game_name, profile=None):
+    """Hämtar exe-filnamnet (gemener) för ett spel, från profilen eller det
+    levande fönstret. Robust mot Terrarias slumpade fönstertitlar."""
+    if profile is None:
+        profile = get_profile(game_name) or {}
+    exe = profile.get('exePath')
+    if exe:
+        return os.path.basename(exe).lower()
+    hwnd = find_real_game_window(game_name)
+    if hwnd:
+        live = _get_window_exe_path(hwnd)
+        if live:
+            return os.path.basename(live).lower()
+    return ''
+
+def _terraria_config_path(exe_base):
+    docs = os.path.join(os.environ['USERPROFILE'], 'Documents', 'My Games')
+    if exe_base == 'tmodloader.exe':
+        for folder in ('tModLoader', os.path.join('Terraria', 'tModLoader')):
+            p = os.path.join(docs, folder, 'config.json')
+            if os.path.exists(p):
+                return p
+        return None
+    if exe_base == 'terraria.exe':
+        p = os.path.join(docs, 'Terraria', 'config.json')
+        return p if os.path.exists(p) else None
+    return None
+
+def force_terraria_windowed(game_name):
+    """Sätter Terrarias config till äkta windowed (Fullscreen=false,
+    WindowBorderless=false). Returnerar (changed, msg).
+    OBS: tar effekt nästa gång spelet STARTAS. Körs spelet redan skrivs
+    filen över vid avslut, så detta är till för nästa launch."""
+    base = _exe_basename_for_game(game_name)
+    path = _terraria_config_path(base)
+    if not path:
+        return False, "not_terraria"
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            cfg = json.load(f)
+
+        if not cfg.get('Fullscreen', False) and not cfg.get('WindowBorderless', False):
+            return False, "already_windowed"
+
+        backup = path + '.truebackup'
+        if not os.path.exists(backup):
+            with open(backup, 'w', encoding='utf-8') as f:
+                json.dump(cfg, f, indent=4)
+
+        cfg['Fullscreen'] = False
+        cfg['WindowBorderless'] = False
+
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(cfg, f, indent=4)
+        return True, "fixed"
+    except Exception as e:
+        return False, str(e)
+
+@eel.expose
+def ensure_terraria_windowed(game_name):
+    changed, msg = force_terraria_windowed(game_name)
+    return {"changed": changed, "message": msg}
+
+@eel.expose
+def get_terraria_display_status(game_name):
+    """För frontend: är detta Terraria, och står den i fullscreen/borderless?"""
+    base = _exe_basename_for_game(game_name)
+    if base not in ('terraria.exe', 'tmodloader.exe'):
+        return {"is_terraria": False}
+    path = _terraria_config_path(base)
+    if not path:
+        return {"is_terraria": True, "config_found": False, "needs_fix": False}
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            cfg = json.load(f)
+        fs = bool(cfg.get('Fullscreen', False))
+        bl = bool(cfg.get('WindowBorderless', False))
+        return {"is_terraria": True, "config_found": True,
+                "fullscreen": fs, "borderless": bl, "needs_fix": fs or bl}
+    except Exception:
+        return {"is_terraria": True, "config_found": True, "needs_fix": False, "error": True}
 
 # ==============================================================================================
 # 6. BAKGRUNDS-TRÅDAR & TRAY
@@ -1125,12 +1361,27 @@ def taskbar_monitor():
             if hwnd != 0:
                 style = win32gui.GetWindowLong(hwnd, GWL_STYLE)
                 rect = win32gui.GetWindowRect(hwnd)
-                curr_y = rect[1]
                 has_coords = 'realY' in active_taskbar_game
-                
-                if (style & WS_CAPTION) or (has_coords and abs(curr_y - active_taskbar_game['realY']) > 1):
+
+                drifted = False
+                if has_coords:
+                    cur_x, cur_y = rect[0], rect[1]
+                    cur_w, cur_h = rect[2] - rect[0], rect[3] - rect[1]
+                    if (abs(cur_x - active_taskbar_game['realX']) > 2 or
+                        abs(cur_y - active_taskbar_game['realY']) > 2 or
+                        abs(cur_w - active_taskbar_game['resW'])  > 2 or
+                        abs(cur_h - active_taskbar_game['resH'])  > 2):
+                        drifted = True
+
+                if (style & WS_CAPTION) or drifted:
                     if has_coords:
-                        force_reapply_borderless(hwnd, active_taskbar_game['realX'], active_taskbar_game['realY'], active_taskbar_game['resW'], active_taskbar_game['resH'])
+                        force_reapply_borderless(
+                            hwnd,
+                            active_taskbar_game['realX'],
+                            active_taskbar_game['realY'],
+                            active_taskbar_game['resW'],
+                            active_taskbar_game['resH'],
+                        )
 
                 foreground_hwnd = win32gui.GetForegroundWindow()
                 if foreground_hwnd == hwnd:
@@ -1154,38 +1405,37 @@ def taskbar_monitor():
 known_auto_applied_games = set()
 
 def background_auto_apply_scanner():
-    """Bakgrundsskanner som letar efter nya spel för att applicera inställningar automatiskt."""
     global known_auto_applied_games
     while True:
-        time.sleep(2.5) 
+        time.sleep(2.5)
         try:
             profiles = get_all_profiles()
             if not profiles:
+                known_auto_applied_games.clear()
                 continue
-                
-            open_windows = get_open_windows()
-            
-            # Rensa bort spel från minnet om de har stängts av
-            known_auto_applied_games = {g for g in known_auto_applied_games if g in open_windows}
-            
-            # Leta igenom alla aktiva fönster för att se om något spel ska justeras
-            for win in open_windows:
-                if win in profiles and win not in known_auto_applied_games:
-                    known_auto_applied_games.add(win)
-                    
-                    if not is_borderless(win):
-                        print(f"Automatisk applicering: {win} från bakgrunden")
-                        init_borderless(win)
-                        
-                        p = profiles[win]
-                        if p.get('alwaysOnTop'):
-                            set_game_topmost(win, True)
-                            
-                        # Försök slå om brytaren i användargränssnittet om det är synligt
-                        try: 
-                            eel.update_switch_from_python(win, True)
-                        except Exception: 
-                            pass
+
+            # Behåll bara spel som fortfarande har ett levande fönster (via exe/ikon)
+            known_auto_applied_games = {
+                g for g in known_auto_applied_games
+                if find_window_for_profile(g, profiles)
+            }
+
+            for prof_name in profiles:
+                if prof_name in known_auto_applied_games:
+                    continue
+                if not find_window_for_profile(prof_name, profiles):
+                    continue
+
+                known_auto_applied_games.add(prof_name)
+                if not is_borderless(prof_name):
+                    print(f"Automatisk applicering: {prof_name} från bakgrunden")
+                    init_borderless(prof_name)
+                    if profiles[prof_name].get('alwaysOnTop'):
+                        set_game_topmost(prof_name, True)
+                    try:
+                        eel.update_switch_from_python(prof_name, True)
+                    except Exception:
+                        pass
         except Exception:
             pass
 
