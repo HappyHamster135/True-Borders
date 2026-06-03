@@ -270,6 +270,38 @@
                             </div>
                             <div class="setting-row"
                                 style="padding: 15px; border: 1px solid var(--bg-panel); border-radius: 8px; display: flex; justify-content: space-between; align-items: center; margin: 0;">
+                                <div>
+                                    <span class="has-tooltip"
+                                        data-tooltip="Allows you to toggle borderless mode on the active window by pressing the hotkey, even when the app is in the background."
+                                        style="display: block; font-weight: bold; color: var(--accent-1); font-family: var(--font-body);">Global Hotkey</span>
+                                    <input type="text" id="hotkey-input" value="ctrl+shift+b" readonly
+                                        onkeydown="recordHotkey(event)"
+                                        style="margin-top: 5px; background: var(--bg-darker); color: var(--text-main); border: 1px solid var(--accent-2); border-radius: 4px; padding: 5px; font-family: var(--font-body); width: 150px; cursor: pointer; text-align: center; text-transform: uppercase; font-weight: bold;"
+                                        title="Click here and press your new keys">
+                                </div>
+                                <label class="neon-switch">
+                                    <input type="checkbox" id="global-hotkey-toggle" onchange="toggleGlobalHotkey()">
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+
+                            <div class="setting-row"
+                                style="padding: 15px; border: 1px solid var(--bg-panel); border-radius: 8px; display: flex; justify-content: space-between; align-items: center; margin: 0;">
+                                <div>
+                                    <span class="has-tooltip"
+                                        data-tooltip="Makes Windows prioritize windowed games the same way as Fullscreen games. Reduces input lag and enables Auto-HDR!"
+                                        style="font-weight: bold; color: var(--accent-1); font-family: var(--font-body);">
+                                        System Latency Boost <small id="admin-note" style="color: var(--text-muted);"></small>
+                                    </span>
+                                    <small style="color: var(--text-muted); display: block; margin-top: 3px;">Enables Windows 11 Windowed Optimizations globally.</small>
+                                </div>
+                                <button id="latency-boost-btn" class="neon-btn-small" onclick="runSystemOptimize()"
+                                    style="padding: 8px 16px; font-size: 13px;">
+                                    Apply Boost
+                                </button>
+                            </div>
+                            <div class="setting-row"
+                                style="padding: 15px; border: 1px solid var(--bg-panel); border-radius: 8px; display: flex; justify-content: space-between; align-items: center; margin: 0;">
                                 <span style="font-weight: bold; color: var(--accent-1); font-family: var(--font-body);">
                                     Version <span id="app-version-display"
                                         style="color: var(--text-color);">Laddar...</span>
@@ -414,40 +446,8 @@
                     <small id="exe-save-status"
                         style="color: var(--text-muted); display: block; margin-top: 5px; font-size: 11px;"></small>
                 </div>
-                <div class="setting-row"
-                    style="margin-top: 20px; padding: 15px; border: 1px solid var(--accent-1); border-radius: 8px;">
-                    <div>
-                        <span class="has-tooltip"
-                            data-tooltip="Allows you to toggle borderless mode on the active window by pressing the hotkey, even when the app is in the background."
-                            style="display: block; font-weight: bold; color: var(--accent-1);"> Global Hotkey</span>
-
-                        <input type="text" id="hotkey-input" value="ctrl+shift+b" readonly
-                            onkeydown="recordHotkey(event)"
-                            style="margin-top: 5px; background: var(--bg-darker); color: var(--text-main); border: 1px solid var(--accent-2); border-radius: 4px; padding: 5px; font-family: var(--font-body); width: 150px; cursor: pointer; text-align: center; text-transform: uppercase; font-weight: bold;"
-                            title="Click here and press your new keys">
-                    </div>
-                    <label class="neon-switch">
-                        <input type="checkbox" id="global-hotkey-toggle" onchange="toggleGlobalHotkey()">
-                        <span class="slider"></span>
-                    </label>
-                </div>
-
-                <div class="setting-row"
-                    style="margin-top: 20px; padding: 15px; border: 1px solid var(--accent-1); border-radius: 8px;">
-                    <div>
-                        <span class="has-tooltip"
-                            data-tooltip="Makes Windows prioritize windowed games the same way as Fullscreen games. Reduces input lag and enables Auto-HDR!"
-                            style="display: block; font-weight: bold; color: var(--accent-1);">
-                            System Latency Boost <small id="admin-note"></small>
-                        </span>
-                        <small style="color: var(--text-muted);">Enables Windows 11 Windowed Optimizations
-                            globally.</small>
-                    </div>
-                    <button id="latency-boost-btn" class="neon-btn-small" onclick="runSystemOptimize()"
-                        style="width: auto; padding: 10px 20px;">
-                        Apply Boost
-                    </button>
-                </div>
+                
+                
             </div>
             <div class="modal-button-container">
                 <button class="cyber-btn teal-btn" onclick="editProfileOnMap()">Edit on Map</button>

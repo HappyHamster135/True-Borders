@@ -26,7 +26,7 @@ from tkinter import filedialog
 # 1. GLOBALA VARIABLER & INITIALISERING
 # ==============================================================================================
 
-CURRENT_VERSION = "1.1.1" 
+CURRENT_VERSION = "1.1.2" 
 UPDATE_INFO_URL = "https://raw.githubusercontent.com/HappyHamster135/True-Borders/main/update.json"
 
 tray_icon_instance = None
@@ -254,6 +254,9 @@ def _enum_candidate_windows():
         title = win32gui.GetWindowText(hwnd).strip()
         if not title or title in EXACT_IGNORE:
             return True
+        # NYTT: ignorera webbläsare och overlays
+        if any(sub in title for sub in SUBSTRING_IGNORE):
+            return True
         rect = win32gui.GetWindowRect(hwnd)
         w, h = rect[2] - rect[0], rect[3] - rect[1]
         if w > 100 and h > 100:
@@ -350,8 +353,6 @@ def find_window_for_profile(profile_name, profiles=None):
 
 
 def find_real_game_window(search_title):
-    """Hittar spelfönstret. Matchar titeln en sparad profil används robust
-    profilmatchning (exe/ikon) som klarar spel som byter titel (t.ex. Terraria)."""
     try:
         profiles = get_all_profiles()
         if search_title in profiles:
@@ -361,12 +362,13 @@ def find_real_game_window(search_title):
     except Exception:
         pass
 
-    # Fallback: ren titelsökning (för fönster utan sparad profil, t.ex. när man
-    # listar igång spel för att skapa en ny profil).
     found_hwnds = []
     def callback(hwnd, _):
         if win32gui.IsWindowVisible(hwnd):
             title = win32gui.GetWindowText(hwnd).strip()
+            # NYTT: ignorera webbläsare och overlays
+            if not title or any(sub in title for sub in SUBSTRING_IGNORE):
+                return True
             if search_title.lower() in title.lower():
                 rect = win32gui.GetWindowRect(hwnd)
                 w, h = rect[2] - rect[0], rect[3] - rect[1]
@@ -648,7 +650,16 @@ def force_window_refresh(window_title, x, y, w, h):
 # ==============================================================================================
 
 EXACT_IGNORE = ["Program Manager", "Settings", "Microsoft Text Input Application", "Windows Input Experience", "True Borders", "Task Manager", "Aktivitetshanteraren"]
-SUBSTRING_IGNORE = ["Overlay", "Default IME", " - Opera", " - Google Chrome", " - Mozilla Firefox", " - Microsoft Edge", " - Brave", " - Vivaldi"]
+SUBSTRING_IGNORE = [
+    "Overlay", "Default IME",
+    " - Opera", " - Google Chrome", " - Mozilla Firefox",
+    " - Microsoft Edge", " - Brave", " - Vivaldi",
+    " - YouTube",        # YouTube-tabs som kan ha snälla titlar
+    " — Mozilla Firefox", # firefox använder em-dash ibland
+    "- Discord",         # Discord-meddelanden om spel
+    "Twitch",            # Streams av spelet
+    "Steam Community",   # Steam-foruminlägg
+]
 
 def _is_valid_user_window(hwnd):
     """Hjälpfunktion för att filtrera bort bakgrundsprogram och överlägg när vi listar öppna fönster."""
@@ -860,17 +871,26 @@ def update_advanced_settings(window_title, hide, disable, on_top, border_fix):
         active_taskbar_game['hide'] = hide
         active_taskbar_game['disable'] = disable
         
-        if hide or disable:
-            set_taskbars_state(hide, disable)
-            taskbar_is_hidden = True
+        # Applicera taskbar-state direkt om spelet är i förgrunden
+        hwnd = find_real_game_window(window_title)
+        is_foreground = (hwnd != 0 and win32gui.GetForegroundWindow() == hwnd)
+        
+        if is_foreground:
+            if hide or disable:
+                set_taskbars_state(hide, disable)
+                taskbar_is_hidden = True
+            else:
+                set_taskbars_state(False, False)
+                taskbar_is_hidden = False
         else:
-            set_taskbars_state(False, False)
-            taskbar_is_hidden = False
+            # Spelet är inte i förgrunden — släck om vi just stängde av
+            if not (hide or disable) and taskbar_is_hidden:
+                set_taskbars_state(False, False)
+                taskbar_is_hidden = False
             
-    # Åtgärda ramen först så att vi inte påverkar z-ordningen i onödan
     if border_fix:
         p = profiles.get(window_title)
-        if p:
+        if p and 'realX' in p:
             force_window_refresh(window_title, p['realX'], p['realY'], p['resW'], p['resH'])
     
     set_game_topmost(window_title, on_top)
