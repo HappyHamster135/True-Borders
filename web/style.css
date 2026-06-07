@@ -2477,3 +2477,76 @@ html.is-dragging-active .profile-card:not(.dragging) {
   color: var(--accent-1);
   background-color: var(--bg-panel);
 }
+
+/* =======================================================
+   Alerts
+   ======================================================= */
+
+.admin-modal {
+  max-width: 460px;
+  padding: 28px 32px;
+}
+
+.admin-modal h2 {
+  margin: 0 0 16px 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-main, #f0f0f0);
+}
+
+.admin-modal p {
+  margin: 0 0 24px 0;
+  line-height: 1.55;
+  color: var(--text-muted, #b0b0b0);
+  font-size: 14px;
+}
+
+.admin-modal-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.btn-admin {
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.18s ease;
+  font-family: inherit;
+  letter-spacing: 0.2px;
+  min-width: 100px;
+}
+
+.btn-admin-secondary {
+  background: transparent;
+  color: var(--text-muted, #b0b0b0);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.btn-admin-secondary:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-main, #f0f0f0);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.btn-admin-primary {
+  background: var(--accent-1, #08d9d6);
+  color: #000;
+  border-color: var(--accent-1, #08d9d6);
+  box-shadow: 0 0 0 0 var(--accent-1, #08d9d6);
+}
+
+.btn-admin-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(8, 217, 214, 0.35);
+  filter: brightness(1.08);
+}
+
+.btn-admin-primary:active {
+  transform: translateY(0);
+  filter: brightness(0.95);
+}

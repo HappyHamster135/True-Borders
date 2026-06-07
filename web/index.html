@@ -370,6 +370,20 @@
     </section>
 
     </div>
+    <div id="admin-required-modal" class="modal" style="display:none;">
+        <div class="modal-content admin-modal">
+            <h2>Administrator privileges required</h2>
+            <p id="admin-required-text">
+            The game is running as administrator. For True Borders to be able 
+            to move the window, True Borders also needs to run as administrator.
+            </p>
+            <div class="admin-modal-actions">
+            <button onclick="closeAdminModal()" class="btn-admin btn-admin-secondary">Cancel</button>
+            <button onclick="restartAsAdmin()" class="btn-admin btn-admin-primary">Restart as admin</button>
+            </div>
+        </div>
+    </div>
+
     <div id="save-prompt-modal" class="modal">
         <div class="modal-content">
             <h3 style="color: var(--accent-1); margin-top: 0;">Save Profile?</h3>

@@ -21,12 +21,13 @@ from PIL import Image, ImageDraw
 from io import BytesIO
 import tkinter as tk
 from tkinter import filedialog
+import pywintypes
 
 # ==============================================================================================
 # 1. GLOBALA VARIABLER & INITIALISERING
 # ==============================================================================================
 
-CURRENT_VERSION = "1.1.2" 
+CURRENT_VERSION = "1.1.3" 
 UPDATE_INFO_URL = "https://raw.githubusercontent.com/HappyHamster135/True-Borders/main/update.json"
 
 tray_icon_instance = None
@@ -84,6 +85,133 @@ start_minimized = get_setting("start_minimized", False)
 @eel.expose
 def get_current_version():
     return CURRENT_VERSION
+
+
+# Set över spel vi redan varnat om så vi inte spammar
+_blocked_games = set()
+
+def safe_set_window_pos(hwnd, hwnd_insert_after, x, y, cx, cy, flags, window_title=None):
+    """
+    Wrapper runt win32gui.SetWindowPos som hanterar Access Denied tyst.
+    För spel som fungerar är beteendet identiskt med direkt-anrop.
+    """
+    try:
+        win32gui.SetWindowPos(hwnd, hwnd_insert_after, x, y, cx, cy, flags)
+        return True
+    except pywintypes.error as e:
+        if e.winerror == 5:  # ERROR_ACCESS_DENIED
+            if window_title and window_title not in _blocked_games:
+                _blocked_games.add(window_title)
+                already_admin = False
+                try:
+                    already_admin = ctypes.windll.shell32.IsUserAnAdmin() != 0
+                except Exception:
+                    pass
+                print(f"[True Borders] '{window_title}' blockerades av Windows (admin krävs).")
+                try:
+                    eel.notify_blocked_game(window_title, already_admin)()
+                except Exception:
+                    pass
+            return False
+        # Andra fel: logga en gång, fortsätt tyst
+        if window_title and window_title not in _blocked_games:
+            _blocked_games.add(window_title)
+            print(f"[True Borders] SetWindowPos misslyckades för '{window_title}': {e}")
+        return False
+
+@eel.expose
+def restart_as_admin():
+    """Startar om True Borders med UAC-prompt och stänger den nuvarande instansen
+    (Chrome-fönstret som Eel startade är INTE ett barn till Python, så vi måste
+    döda det direkt via Win32 API)."""
+    try:
+        # STEG 1: Hitta Chrome-fönstret som tillhör OSS, INNAN admin-versionen startas.
+        chrome_pids = []
+        my_pid = os.getpid()
+        
+        def find_chrome_windows(hwnd, _):
+            try:
+                if win32gui.IsWindowVisible(hwnd):
+                    title = win32gui.GetWindowText(hwnd)
+                    if title == "True Borders":
+                        _, pid = win32process.GetWindowThreadProcessId(hwnd)
+                        if pid and pid != my_pid and pid not in chrome_pids:
+                            chrome_pids.append(pid)
+            except Exception:
+                pass
+            return True
+        
+        try:
+            win32gui.EnumWindows(find_chrome_windows, None)
+        except Exception:
+            pass
+        
+        print(f"[ADMIN] Found {len(chrome_pids)} chrome PID(s) to kill: {chrome_pids}")
+        
+        # STEG 2: Starta admin-versionen via UAC
+        if getattr(sys, 'frozen', False):
+            exe_path = sys.executable
+            params = ""
+        else:
+            exe_path = sys.executable
+            params = f'"{os.path.abspath(sys.argv[0])}"'
+        
+        result = ctypes.windll.shell32.ShellExecuteW(
+            None, "runas", exe_path, params, None, 1
+        )
+        
+        if result <= 32:
+            return False
+        
+        try:
+            restore_everything_on_exit()
+        except Exception:
+            pass
+        
+        def kill_everything():
+            # Liten delay så Eel hinner skicka success-värdet till JS
+            time.sleep(0.3)
+            
+            # STEG A: Skicka WM_CLOSE till Chrome-fönstret (snäll stängning)
+            for pid in chrome_pids:
+                def close_window_for_pid(hwnd, target_pid):
+                    try:
+                        _, p = win32process.GetWindowThreadProcessId(hwnd)
+                        if p == target_pid:
+                            ctypes.windll.user32.PostMessageW(hwnd, 0x0010, 0, 0)  # WM_CLOSE
+                    except Exception:
+                        pass
+                    return True
+                try:
+                    win32gui.EnumWindows(close_window_for_pid, pid)
+                except Exception:
+                    pass
+            
+            # Vänta lite så Chrome hinner stänga snällt
+            time.sleep(0.3)
+            
+            # STEG B: Force-terminate Chrome via Win32 API (synkront, ingen subprocess)
+            for pid in chrome_pids:
+                try:
+                    PROCESS_TERMINATE = 0x0001
+                    h = ctypes.windll.kernel32.OpenProcess(PROCESS_TERMINATE, False, pid)
+                    if h:
+                        ctypes.windll.kernel32.TerminateProcess(h, 0)
+                        ctypes.windll.kernel32.CloseHandle(h)
+                        print(f"[ADMIN] Terminated chrome PID {pid}")
+                except Exception as e:
+                    print(f"[ADMIN] Could not terminate chrome PID {pid}: {e}")
+            
+            # STEG C: Avsluta oss själva
+            time.sleep(0.1)
+            os._exit(0)
+        
+        threading.Thread(target=kill_everything, daemon=True).start()
+        return True
+        
+    except Exception as e:
+        print(f"Kunde inte starta om som admin: {e}")
+        return False
 
 # ==============================================================================================
 # 2. PROFILHANTERING OCH AUTO-LAUNCHER
@@ -596,11 +724,12 @@ def update_window_pos(window_title, x, y, w, h):
     hwnd = find_real_game_window(window_title)
     if hwnd != 0:
         flags = 0x0004 | 0x0010 | 0x4000
-        win32gui.SetWindowPos(hwnd, 0, int(x), int(y), int(w), int(h), flags)
-        print(f"[UPDATE_POS] ({x},{y})")  # NYTT
-
-        global active_taskbar_game, last_intentional_move_ts
-        last_intentional_move_ts = time.time()
+        success = safe_set_window_pos(hwnd, 0, int(x), int(y), int(w), int(h), flags, window_title)
+        
+        if not success:
+            return  # Spelet kan inte manipuleras, hoppa över state-uppdateringen
+        
+        global active_taskbar_game
         if active_taskbar_game and active_taskbar_game.get('name') == window_title:
             active_taskbar_game['realX'] = int(x)
             active_taskbar_game['realY'] = int(y)

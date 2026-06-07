@@ -1778,6 +1778,56 @@ function update_switch_from_python(gameName, isBorderless) {
   }
 }
 
+eel.expose(notify_blocked_game);
+function notify_blocked_game(gameName, alreadyAdmin) {
+  const statusEl = document.getElementById("status-polished");
+  if (statusEl) {
+    statusEl.innerText = `⚠️ "${gameName}" är blockerat – admin krävs`;
+    statusEl.style.color = "var(--accent-2)";
+  }
+
+  if (alreadyAdmin) {
+    alert(
+      `"${gameName}" cannot be controlled even though True Borders is running as admin.\n\n` +
+        `The game likely uses anti-cheat (Vanguard, EAC, BattlEye) which ` +
+        `blocks all external window management.`,
+    );
+    return;
+  }
+
+  const textEl = document.getElementById("admin-required-text");
+  if (textEl) {
+    textEl.innerHTML =
+      `<strong>"${gameName}"</strong> is running as administrator ` +
+      `(likely via Steam started as admin).<br><br>` +
+      `For True Borders to be able to move the window, True Borders ` +
+      `also needs to run as administrator.`;
+  }
+  document.getElementById("admin-required-modal").style.display = "flex";
+}
+
+async function restartAsAdmin() {
+  closeAdminModal();
+
+  const statusEl = document.getElementById("status-polished");
+  if (statusEl) {
+    statusEl.innerText = "Restarting as administrator...";
+    statusEl.style.color = "var(--accent-1)";
+  }
+
+  const success = await eel.restart_as_admin()();
+  if (success === false) {
+    if (statusEl) {
+      statusEl.innerText = "Restart cancelled.";
+      statusEl.style.color = "var(--text-muted)";
+    }
+  }
+}
+
+function closeAdminModal() {
+  document.getElementById("admin-required-modal").style.display = "none";
+}
+
 async function checkAdminStatus() {
   const admin = await eel.is_admin()();
   const btn = document.getElementById("latency-boost-btn");
