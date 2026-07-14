@@ -6,7 +6,10 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[('web', 'web'), ('updater.exe', '.')],
-    hiddenimports=[],
+    hiddenimports=[
+        'webview.platforms.winforms',
+        'webview.platforms.edgechromium',
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

@@ -17,7 +17,6 @@ let isCurrentlyBorderlessSession = false; // Håller koll på om spelet faktiskt
 
 let currentGameToEdit = "";
 let resizeTimer;
-let lastMouseY = 0; // Håller koll på om vi drar profiler uppåt eller neråt
 
 let allMonitors = [];
 let selectedMonitorIndex = null; // null = fri/custom, -1 = alla skärmar, annars index
@@ -30,9 +29,57 @@ const MIN_INNER_HEIGHT = 750;
 //  2. UPPSTART & INITIALISERING (Körs när appen öppnas)
 // ==========================================================================
 
+// Återställer viktiga UI-val från settings.json om localStorage tappat dem
+// (händer om WebView2:s lagring rensas vid krasch/uppdatering).
+async function syncUiPrefsFromDisk() {
+  try {
+    const prefs = await eel.get_ui_prefs()();
+    if (!prefs) return;
+
+    if (
+      prefs.savedTheme &&
+      prefs.savedTheme !== localStorage.getItem("savedTheme")
+    ) {
+      localStorage.setItem("savedTheme", prefs.savedTheme);
+      document.documentElement.setAttribute("data-theme", prefs.savedTheme);
+      document
+        .querySelectorAll(".theme-btn")
+        .forEach((b) => b.classList.remove("active"));
+      const btn = document.querySelector(
+        `.theme-btn[data-theme="${prefs.savedTheme === "cyberpunk" ? "default" : prefs.savedTheme}"]`,
+      );
+      if (btn) btn.classList.add("active");
+    }
+
+    if (
+      prefs.customHotkey &&
+      prefs.customHotkey !== localStorage.getItem("customHotkey")
+    ) {
+      localStorage.setItem("customHotkey", prefs.customHotkey);
+    }
+    if (typeof prefs.globalHotkeyEnabled === "boolean") {
+      localStorage.setItem(
+        "globalHotkeyEnabled",
+        String(prefs.globalHotkeyEnabled),
+      );
+    }
+    if (
+      prefs.profileSort &&
+      prefs.profileSort !== localStorage.getItem("profileSort")
+    ) {
+      localStorage.setItem("profileSort", prefs.profileSort);
+    }
+  } catch (err) {}
+}
+
 async function initMap() {
   localStorage.removeItem("monitorLayout");
   loadAppVersion();
+
+  // Synka tema/hotkey/sortering från disk-kopian INNAN resten laddar
+  // (splash-skärmen täcker ev. temabyte så inget blinkar).
+  await syncUiPrefsFromDisk();
+  loadGlobalSettings();
 
   await eel.set_app_on_top()();
   await populateWindowDropdown();
@@ -860,8 +907,14 @@ function makeDraggable(elmnt) {
     document.onmouseup = null;
     document.onmousemove = null;
     eel.end_user_drag()();
-    // Auto-save när du släpper musen!
-    const windowName = document.getElementById("window_title_input").value;
+    // Auto-save när du släpper musen (bara om borderless redan är applicerat,
+    // samma beteende som D-paddens nudge) — så profilen alltid minns senaste läget.
+    if (
+      typeof isCurrentlyBorderlessSession !== "undefined" &&
+      isCurrentlyBorderlessSession
+    ) {
+      await autoSaveCurrentState();
+    }
   }
 }
 
@@ -1265,6 +1318,12 @@ function prettifyGameName(rawName) {
     " ",
   );
 
+  // Teknik-skräp i titeln: (5120x1440), (DX11), (Vulkan), (6 + 6 WT) osv.
+  s = s.replace(/[\(\[]\s*\d{3,5}\s*[x×]\s*\d{3,5}\s*[\)\]]/gi, " ");
+  s = s.replace(/[\(\[]\s*(dx|directx|vulkan|opengl|gl)\s*\d*\s*[\)\]]/gi, " ");
+  s = s.replace(/[\(\[]\s*\d+\s*\+\s*\d+\s*wt\s*[\)\]]/gi, " ");
+  s = s.replace(/[\(\[]\s*(64|32)[\s\-]?bit[^\)\]]*[\)\]]/gi, " ");
+
   // "Early Access" utan parenteser
   s = s.replace(/\bearly[\s\-]?access\b/gi, " ");
 
@@ -1276,64 +1335,167 @@ function prettifyGameName(rawName) {
 
   // Städa kvarvarande skiljetecken & blanksteg
   s = s.replace(/\(\s*\)|\[\s*\]|\{\s*\}/g, " "); // tomma parenteser
-  s = s.replace(/\s*[-–—:•|]+\s*$/g, ""); // skräp i slutet
-  s = s.replace(/^\s*[-–—:•|]+\s*/g, ""); // skräp i början
+  s = s.replace(/(?:\s*[-–—:•|]+)+\s*$/g, ""); // skräp i slutet (även " - -")
+  s = s.replace(/^\s*(?:[-–—:•|]+\s*)+/g, ""); // skräp i början
   s = s.replace(/\s*([-–—:•|])\s*(?:[-–—:•|]\s*)+/g, " $1 "); // dubbletter
   s = s.replace(/\s{2,}/g, " ").trim();
 
   return s.length ? s : rawName.trim(); // föll allt bort? behåll originalet
 }
 
+function getProfileSortMode() {
+  return localStorage.getItem("profileSort") || "custom";
+}
+
+function changeProfileSort(mode) {
+  localStorage.setItem("profileSort", mode);
+  try {
+    eel.save_ui_pref("profileSort", mode)();
+  } catch (err) {}
+  loadProfilesTab();
+}
+
+async function toggleProfileFavorite(name, makeFav) {
+  await eel.set_profile_favorite(name, makeFav)();
+  loadProfilesTab();
+}
+
 async function loadProfilesTab() {
   const profiles = await eel.get_all_profiles()();
+  // EN backend-fråga för alla körande spel istället för en per profil —
+  // gör att fliken laddar snabbt även med 50+ profiler.
+  const runningKeys = new Set(await eel.get_running_profile_names()());
   const list = document.getElementById("profile-list");
+  const sortMode = getProfileSortMode();
+
+  const sortSelect = document.getElementById("profile-sort");
+  if (sortSelect) sortSelect.value = sortMode;
+
+  let entries = Object.entries(profiles);
+  if (sortMode === "az") {
+    entries.sort((a, b) =>
+      prettifyGameName(a[0])
+        .toLowerCase()
+        .localeCompare(prettifyGameName(b[0]).toLowerCase(), "sv"),
+    );
+  } else if (sortMode === "added") {
+    entries.sort((a, b) => (b[1].createdAt || 0) - (a[1].createdAt || 0));
+  } else if (sortMode === "used") {
+    entries.sort((a, b) => (b[1].lastUsed || 0) - (a[1].lastUsed || 0));
+  }
+  // Favoriter överst (utom i manuell ordning, där användarens drag styr allt)
+  if (sortMode !== "custom") {
+    entries = [
+      ...entries.filter((e) => e[1].favorite),
+      ...entries.filter((e) => !e[1].favorite),
+    ];
+  }
+
+  const draggable = sortMode === "custom";
   list.innerHTML = "";
 
-  for (const name of Object.keys(profiles)) {
-    const p = profiles[name];
-    const isCurrentlyBorderless = await eel.is_borderless(name)();
-    const checkedState = isCurrentlyBorderless ? "checked" : "";
-    let iconBase64 = p.icon || (await eel.get_window_icon_base64(name)());
+  for (const [name, p] of entries) {
+    const isRunning = runningKeys.has(name);
+    const isCurrentlyBorderless = isRunning
+      ? await eel.is_borderless(name)()
+      : false;
 
-    let iconHtml = iconBase64
-      ? `<img src="${iconBase64}" class="window-icon" style="width: 16px; height: 16px; margin-right: 8px;">`
-      : "";
+    let iconBase64 = p.icon || null;
+    if (!iconBase64 && isRunning) {
+      iconBase64 = await eel.get_window_icon_base64(name)();
+    }
 
-    const displayName = prettifyGameName(name);
+    // Korten byggs med DOM-API:er och closures — ALDRIG inline onclick med
+    // interpolerade namn (apostrofer i t.ex. "Baldur's Gate 3" kraschade
+    // attribut-JS:et så kugghjul/play/toggle blev döda för de spelen).
     const card = document.createElement("div");
     card.className = "profile-card";
-    card.draggable = true;
+    card.draggable = draggable;
     card.dataset.name = name;
 
-    card.innerHTML = `
-            <div class="drag-handle">⋮⋮</div>
-            <div class="profile-info">
-                <h3 title="${name}">${iconHtml}${displayName}</h3>
-                <p>${p.resW}x${p.resH}</p>
-            </div>
-            <div class="profile-actions">
-                <button class="icon-btn play-btn" onclick="launchGame('${name}')" title="Play Game">▶️</button>
-                
-                <button class="icon-btn" onclick="editProfile('${name}')" title="Profile Settings">⚙️</button>
-                <label class="neon-switch">
-                    <input type="checkbox" id="toggle-${name}" onchange="handleToggle(event, '${name}')" ${checkedState}>
-                    <span class="slider"></span>
-                </label>
-            </div>
-        `;
+    const handle = document.createElement("div");
+    handle.className = "drag-handle";
+    handle.innerText = "⋮⋮";
+    if (!draggable) handle.style.display = "none";
 
-    card.addEventListener("dragstart", (e) => {
-      card.classList.add("dragging");
-      document.documentElement.classList.add("is-dragging-active");
-      e.dataTransfer.effectAllowed = "move";
-      e.dataTransfer.setData("text/plain", name);
-    });
+    const info = document.createElement("div");
+    info.className = "profile-info";
+    const h3 = document.createElement("h3");
+    h3.title = name;
+    if (iconBase64) {
+      const img = document.createElement("img");
+      img.src = iconBase64;
+      img.className = "window-icon";
+      img.style.cssText = "width:16px; height:16px; margin-right:8px; flex-shrink:0;";
+      h3.appendChild(img);
+    }
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "pname";
+    nameSpan.innerText = prettifyGameName(name);
+    h3.appendChild(nameSpan);
+    const resP = document.createElement("p");
+    resP.innerText = `${p.resW}x${p.resH}`;
+    info.appendChild(h3);
+    info.appendChild(resP);
 
-    card.addEventListener("dragend", () => {
-      card.classList.remove("dragging");
-      document.documentElement.classList.remove("is-dragging-active");
-      saveNewOrder();
-    });
+    const actions = document.createElement("div");
+    actions.className = "profile-actions";
+
+    const starBtn = document.createElement("button");
+    starBtn.className = "icon-btn star-btn" + (p.favorite ? " is-fav" : "");
+    starBtn.title = p.favorite ? "Remove favorite" : "Mark as favorite";
+    starBtn.innerText = p.favorite ? "★" : "☆";
+    starBtn.addEventListener("click", () =>
+      toggleProfileFavorite(name, !p.favorite),
+    );
+
+    const playBtn = document.createElement("button");
+    playBtn.className = "icon-btn play-btn";
+    playBtn.title = "Play Game";
+    playBtn.innerText = "▶️";
+    playBtn.addEventListener("click", () => launchGame(name));
+
+    const gearBtn = document.createElement("button");
+    gearBtn.className = "icon-btn";
+    gearBtn.title = "Profile Settings";
+    gearBtn.innerText = "⚙️";
+    gearBtn.addEventListener("click", () => editProfile(name));
+
+    const switchLabel = document.createElement("label");
+    switchLabel.className = "neon-switch";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.id = `toggle-${name}`;
+    checkbox.checked = isCurrentlyBorderless;
+    checkbox.addEventListener("change", (e) => handleToggle(e, name));
+    const slider = document.createElement("span");
+    slider.className = "slider";
+    switchLabel.appendChild(checkbox);
+    switchLabel.appendChild(slider);
+
+    actions.appendChild(starBtn);
+    actions.appendChild(playBtn);
+    actions.appendChild(gearBtn);
+    actions.appendChild(switchLabel);
+
+    card.appendChild(handle);
+    card.appendChild(info);
+    card.appendChild(actions);
+
+    if (draggable) {
+      card.addEventListener("dragstart", (e) => {
+        card.classList.add("dragging");
+        document.documentElement.classList.add("is-dragging-active");
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", name);
+      });
+
+      card.addEventListener("dragend", () => {
+        card.classList.remove("dragging");
+        document.documentElement.classList.remove("is-dragging-active");
+        saveNewOrder();
+      });
+    }
 
     list.appendChild(card);
   }
@@ -1401,7 +1563,6 @@ async function handleToggle(event, name) {
 
 async function editProfile(name) {
   const p = await eel.get_profile(name)();
-  document.getElementById("modal-border-fix").checked = p.borderFix || false;
   if (!p) return;
 
   document.getElementById("modal-game-name").innerText = name;
@@ -1411,16 +1572,19 @@ async function editProfile(name) {
     p.disableTaskbar || false;
   document.getElementById("modal-always-ontop").checked =
     p.alwaysOnTop || false;
+  document.getElementById("modal-border-fix").checked = p.borderFix || false;
 
-  const borderFixToggle = document.getElementById("modal-border-fix");
-  if (borderFixToggle) {
-    borderFixToggle.checked = p.borderFix || false;
-  }
+  // Auto-apply är PÅ om inget sparats (bakåtkompatibelt med äldre profiler),
+  // letterbox och muslås är AV tills man slår på dem.
+  document.getElementById("modal-auto-apply").checked = p.autoApply !== false;
+  document.getElementById("modal-letterbox").checked = p.letterbox || false;
+  document.getElementById("modal-mouse-lock").checked = p.mouseLock || false;
 
   document.getElementById("modal-exe-path").value = p.exePath || "";
+  document.getElementById("modal-steam-appid").value = p.steamAppId || "";
   document.getElementById("exe-save-status").innerText = ""; // Nollställ status-texten
 
-  document.getElementById("settings-modal").style.display = "block"; // Denna rad har du redan!
+  document.getElementById("settings-modal").style.display = "block";
 }
 
 function editProfileOnMap() {
@@ -1487,6 +1651,13 @@ async function browseForExe() {
   if (newPath) {
     document.getElementById("modal-exe-path").value = newPath;
     await eel.update_exe_path(gameName, newPath)(); // Sparar direkt
+
+    // Visa ev. auto-detekterat Steam-AppID från den nya sökvägen
+    const p = await eel.get_profile(gameName)();
+    if (p) {
+      document.getElementById("modal-steam-appid").value = p.steamAppId || "";
+    }
+
     document.getElementById("exe-save-status").innerText = "✓ Path saved!";
     document.getElementById("exe-save-status").style.color = "var(--accent-1)";
   }
@@ -1496,8 +1667,33 @@ async function manuallyUpdateExePath() {
   const gameName = document.getElementById("modal-game-name").innerText;
   const newPath = document.getElementById("modal-exe-path").value;
   await eel.update_exe_path(gameName, newPath)();
+
+  // Sökvägen kan ha gett oss ett nytt auto-detekterat Steam-AppID — visa det
+  const p = await eel.get_profile(gameName)();
+  if (p) {
+    document.getElementById("modal-steam-appid").value = p.steamAppId || "";
+  }
+
   document.getElementById("exe-save-status").innerText =
     "✓ Path saved manually!";
+  document.getElementById("exe-save-status").style.color = "var(--accent-1)";
+}
+
+async function manuallyUpdateSteamAppId() {
+  const gameName = document.getElementById("modal-game-name").innerText;
+  const appId = document.getElementById("modal-steam-appid").value.trim();
+
+  if (appId && !/^\d+$/.test(appId)) {
+    document.getElementById("exe-save-status").innerText =
+      "⚠️ Steam AppID must be a number (or empty to launch the exe directly).";
+    document.getElementById("exe-save-status").style.color = "var(--accent-2)";
+    return;
+  }
+
+  await eel.update_steam_appid(gameName, appId)();
+  document.getElementById("exe-save-status").innerText = appId
+    ? "✓ Steam AppID saved — Play launches via Steam!"
+    : "✓ Cleared — Play launches the exe directly.";
   document.getElementById("exe-save-status").style.color = "var(--accent-1)";
 }
 
@@ -1513,57 +1709,58 @@ if (profileList) {
   profileList.addEventListener("dragover", (e) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
-
-    const dragging = document.querySelector(".dragging");
-    if (!dragging) return;
-
-    const siblings = [
-      ...profileList.querySelectorAll(".profile-card:not(.dragging)"),
-    ];
-
-    let nextSibling = siblings.find((sibling) => {
-      const box = sibling.getBoundingClientRect();
-      const boxCenterY = box.top + box.height / 2;
-      return e.clientY < boxCenterY;
-    });
-
-    if (nextSibling) {
-      if (nextSibling !== dragging.nextSibling) {
-        profileList.insertBefore(dragging, nextSibling);
-      }
-    } else {
-      profileList.appendChild(dragging);
-    }
+    // Samma grid-medvetna logik som window-lyssnaren
+    repositionDraggingCard(e.clientX, e.clientY);
   });
 }
 
 // Delad reorder-logik: anropas både av dragover OCH av auto-scroll-loopen.
-function repositionDraggingCard(clientY, forcedDown = null) {
+// Strategi "ta över platsen": kortet flyttas ENDAST när pekaren är över ett
+// annat kort, och tar då exakt det kortets plats i gridet. Efter bytet står
+// pekaren över det dragna kortet självt -> inget mer händer -> stabilt.
+// (Den gamla läsordnings-omräkningen fick kortet att studsa vänster/höger
+// när man drog rakt nedåt i en kolumn, eftersom varje flytt stuvade om
+// gridet och ändrade nästa beräkning.)
+function repositionDraggingCard(clientX, clientY) {
   const dragging = document.querySelector(".dragging");
   const listObj = document.getElementById("profile-list");
   if (!dragging || !listObj) return;
 
-  // Under auto-scroll står markören stilla, så vi tvingar riktning från scrollen.
-  const isDraggingDown =
-    forcedDown !== null ? forcedDown : clientY > lastMouseY;
-  lastMouseY = clientY;
+  const cards = [...listObj.querySelectorAll(".profile-card")];
+  const siblings = cards.filter((c) => c !== dragging);
+  if (!siblings.length) return;
 
-  const siblings = [
-    ...listObj.querySelectorAll(".profile-card:not(.dragging)"),
-  ];
-
-  const nextSibling = siblings.find((sibling) => {
-    const box = sibling.getBoundingClientRect();
-    const sensitivity = isDraggingDown ? 0.25 : 0.75;
-    return clientY < box.top + box.height * sensitivity;
+  // Vilket kort ligger pekaren över just nu?
+  const over = siblings.find((s) => {
+    const r = s.getBoundingClientRect();
+    return (
+      clientY >= r.top &&
+      clientY <= r.bottom &&
+      (clientX === null || (clientX >= r.left && clientX <= r.right))
+    );
   });
 
-  if (nextSibling) {
-    if (nextSibling !== dragging.nextSibling) {
-      listObj.insertBefore(dragging, nextSibling);
+  if (over) {
+    const from = cards.indexOf(dragging);
+    const to = cards.indexOf(over);
+    if (from < to) {
+      listObj.insertBefore(dragging, over.nextSibling);
+    } else {
+      listObj.insertBefore(dragging, over);
     }
-  } else {
-    listObj.appendChild(dragging);
+    return;
+  }
+
+  // Pekaren under sista kortet -> flytta sist; ovanför första -> först.
+  // I mellanrum/gap: gör ingenting (stabilt).
+  const lastRect = siblings[siblings.length - 1].getBoundingClientRect();
+  if (clientY > lastRect.bottom) {
+    if (dragging !== listObj.lastElementChild) listObj.appendChild(dragging);
+    return;
+  }
+  const firstRect = siblings[0].getBoundingClientRect();
+  if (clientY < firstRect.top && dragging !== listObj.firstElementChild) {
+    listObj.insertBefore(dragging, listObj.firstElementChild);
   }
 }
 
@@ -1574,12 +1771,14 @@ window.addEventListener("dragover", (e) => {
   const dragging = document.querySelector(".dragging");
   if (!dragging) return;
 
-  dragScrollPointerY = e.clientY; // mata kant-scrollern med musens läge
-  repositionDraggingCard(e.clientY);
+  dragScrollPointerX = e.clientX; // mata kant-scrollern med musens läge
+  dragScrollPointerY = e.clientY;
+  repositionDraggingCard(e.clientX, e.clientY);
 });
 
 // ---- AUTO-SCROLL VID DRAG TILL KANTEN ----
 let dragScrollRAF = null;
+let dragScrollPointerX = 0;
 let dragScrollPointerY = 0;
 let dragScrollContainer = null;
 
@@ -1652,7 +1851,7 @@ function dragAutoScrollStep() {
     container.scrollTop += dy;
     // Bara om vi faktiskt scrollade (inte redan i botten/toppen): flytta kortet
     if (container.scrollTop !== before) {
-      repositionDraggingCard(dragScrollPointerY, dy > 0);
+      repositionDraggingCard(dragScrollPointerX, dragScrollPointerY);
     }
   }
 
@@ -1670,7 +1869,8 @@ function stopDragAutoScroll() {
 // Starta/stoppa loopen i takt med dragen
 window.addEventListener("dragstart", (e) => {
   if (e.target.closest && e.target.closest(".profile-card")) {
-    dragScrollPointerY = e.clientY; // säkerställ ett startvärde direkt
+    dragScrollPointerX = e.clientX; // säkerställ ett startvärde direkt
+    dragScrollPointerY = e.clientY;
     startDragAutoScroll();
   }
 });
@@ -1697,6 +1897,9 @@ async function updateTaskbarSettings() {
   const disable = document.getElementById("modal-disable-taskbar").checked;
   const onTop = document.getElementById("modal-always-ontop").checked;
   const borderFix = document.getElementById("modal-border-fix").checked;
+  const autoApply = document.getElementById("modal-auto-apply").checked;
+  const letterbox = document.getElementById("modal-letterbox").checked;
+  const mouseLock = document.getElementById("modal-mouse-lock").checked;
 
   await eel.update_advanced_settings(
     gameName,
@@ -1704,6 +1907,9 @@ async function updateTaskbarSettings() {
     disable,
     onTop,
     borderFix,
+    autoApply,
+    letterbox,
+    mouseLock,
   )();
   loadProfilesTab();
 }
@@ -1731,6 +1937,10 @@ async function toggleGlobalHotkey() {
 
   localStorage.setItem("globalHotkeyEnabled", isEnabled);
   localStorage.setItem("customHotkey", hotkeyStr);
+  try {
+    eel.save_ui_pref("globalHotkeyEnabled", isEnabled)();
+    eel.save_ui_pref("customHotkey", hotkeyStr)();
+  } catch (err) {}
   await eel.set_custom_hotkey(hotkeyStr, isEnabled)();
 }
 
@@ -1878,6 +2088,30 @@ async function runSystemOptimize() {
   }
 }
 
+async function fixTaskbarNow() {
+  const btn = document.getElementById("taskbar-fix-btn");
+  if (btn) {
+    btn.disabled = true;
+    btn.innerText = "Fixing...";
+  }
+
+  const success = await eel.emergency_taskbar_fix()();
+
+  if (btn) {
+    btn.innerText = success ? "Taskbar Fixed ✓" : "Failed — try as Admin";
+    setTimeout(() => {
+      btn.innerText = "Fix Taskbar";
+      btn.disabled = false;
+    }, 2500);
+  }
+
+  const statusEl = document.getElementById("status-polished");
+  if (statusEl && success) {
+    statusEl.innerText = "Taskbar restored to Windows defaults.";
+    statusEl.style.color = "var(--accent-1)";
+  }
+}
+
 async function handleAutostartToggle() {
   const isEnabled = document.getElementById("setting-autostart").checked;
   const success = await eel.toggle_autostart(isEnabled)();
@@ -1950,21 +2184,36 @@ document.addEventListener("DOMContentLoaded", () => {
         document.documentElement.setAttribute("data-theme", themeName);
       }
 
+      // Spara valet — uppstartsskriptet i index.html läser 'savedTheme'.
+      // ("default"-knappen motsvarar cyberpunk, samma namn som startvärdet.)
+      const persistName = themeName === "default" ? "cyberpunk" : themeName;
+      localStorage.setItem("savedTheme", persistName);
+      // Spegla till settings.json så valet överlever även om localStorage rensas
+      try {
+        eel.save_ui_pref("savedTheme", persistName)();
+      } catch (err) {}
+
       document
         .querySelectorAll(".theme-btn")
         .forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
-
-      if (typeof eel.select_theme === "function") {
-        await eel.select_theme(themeName)();
-      }
     });
+
+    // Markera det sparade temats knapp som aktiv vid start
+    const saved = localStorage.getItem("savedTheme") || "cyberpunk";
+    const activeBtn = themeGrid.querySelector(
+      `.theme-btn[data-theme="${saved === "cyberpunk" ? "default" : saved}"]`,
+    );
+    if (activeBtn) activeBtn.classList.add("active");
   }
 });
 
 function applyTheme(themeName) {
   document.documentElement.setAttribute("data-theme", themeName);
   localStorage.setItem("savedTheme", themeName);
+  try {
+    eel.save_ui_pref("savedTheme", themeName)();
+  } catch (err) {}
   document.getElementById("status-polished").innerText =
     `Theme changed to ${themeName}`;
 }
@@ -2108,13 +2357,11 @@ async function handleSavePrompt(shouldSave) {
   const modal = document.getElementById("save-prompt-modal");
   const gameName = document.getElementById("window_title_input").value;
 
-  if (shouldSave) {
-    const data = {
-      resW: parseInt(document.getElementById("resW").value),
-      resH: parseInt(document.getElementById("resH").value),
-    };
-
-    await eel.save_profile(gameName, data)();
+  if (shouldSave && gameName && gameName !== "Select a game...") {
+    // Spara HELA läget (storlek OCH position). Tidigare sparades bara
+    // resW/resH här, vilket gjorde att profilen saknade realX/realY och
+    // spelet hamnade längst till vänster (0,0) vid nästa auto-apply.
+    await autoSaveCurrentState();
     console.log("Profile saved:", gameName);
     document
       .getElementById("window_title_input")
@@ -2181,12 +2428,20 @@ async function autoApplyScanner() {
     if (!knownRunningGames.has(key) && !manuallyRestoredGames.has(key)) {
       knownRunningGames.add(key);
 
+      const p = profiles[key];
       const isBorderless = await eel.is_borderless(key)();
+
+      // Profil med auto-apply avstängt: rör inte spelet, synka bara toggeln
+      if (p && p.autoApply === false) {
+        const toggleBtn = document.getElementById(`toggle-${key}`);
+        if (toggleBtn) toggleBtn.checked = isBorderless;
+        continue;
+      }
+
       if (!isBorderless) {
         await eel.init_borderless(key)();
         await selectGameInVisualMap(key);
 
-        const p = profiles[key];
         if (p && p.alwaysOnTop) await eel.set_game_topmost(key, true)();
 
         const toggleBtn = document.getElementById(`toggle-${key}`);
@@ -2205,26 +2460,48 @@ async function autoApplyScanner() {
   }
 }
 
-// Bakgrundsvakt: Kollar varannan sekund om det valda spelet faktiskt har stängts helt
+// Bakgrundsvakt: Kollar om det valda spelet faktiskt har stängts helt.
+// Vi kräver TVÅ missar i rad (~6 sek) innan valet nollställs — spel som
+// byter fönstertitel (t.ex. BG3 som har upplösningen i titeln) eller
+// återskapar sitt fönster vid mode-byten ska inte kasta ut valet.
+let selectionMissCount = 0;
+let lastGuardedSelection = "";
+
 setInterval(async () => {
   const hiddenInput = document.getElementById("window_title_input");
   const currentSelected = hiddenInput.value;
 
-  if (currentSelected && currentSelected !== "") {
-    // Kontrollera om fönstret fortfarande existerar
-    const isRunning = await eel.is_game_running(currentSelected)();
-
-    if (!isRunning) {
-      // Spelet är verkligen helt stängt (inte bara laddar eller byter ikon)
-      hiddenInput.value = "";
-      document.getElementById("custom-select-text").innerHTML =
-        "Select a game...";
-
-      // Töm inte rutorna här, låt värdena stå kvar utifall användaren vill ändra dem
-      console.log(`Fönstret "${currentSelected}" stängdes. Nollställer valet.`);
-    }
+  if (!currentSelected || currentSelected === "Select a game...") {
+    selectionMissCount = 0;
+    lastGuardedSelection = "";
+    return;
   }
-}, 3000); // Ökade tiden till 3 sekunder för att ge Unreal Engine tid att "vakna"
+
+  // Nytt val sedan sist? Börja om räkningen.
+  if (currentSelected !== lastGuardedSelection) {
+    lastGuardedSelection = currentSelected;
+    selectionMissCount = 0;
+  }
+
+  const isRunning = await eel.is_game_running(currentSelected)();
+
+  if (isRunning) {
+    selectionMissCount = 0;
+    return;
+  }
+
+  selectionMissCount++;
+  if (selectionMissCount < 2) return; // ge spelet en chans till innan vi släpper det
+
+  // Spelet är verkligen helt stängt (inte bara laddar eller byter titel)
+  selectionMissCount = 0;
+  lastGuardedSelection = "";
+  hiddenInput.value = "";
+  document.getElementById("custom-select-text").innerHTML = "Select a game...";
+
+  // Töm inte rutorna här, låt värdena stå kvar utifall användaren vill ändra dem
+  console.log(`Fönstret "${currentSelected}" stängdes. Nollställer valet.`);
+}, 3000); // 3 sekunder per koll för att ge Unreal Engine tid att "vakna"
 
 // Tvinga minsta fönsterstorlek (så appen inte krymper ihop sig själv)
 window.addEventListener("resize", () => {
@@ -2272,11 +2549,20 @@ async function maybeWarnTerrariaDisplay(name) {
 }
 
 // App-kontroller (Exit & Göm)
+// Avslut går via Python (quit_app) — window.close() fungerar inte i det
+// nya nativa fönstret (WebView2) och behålls bara som reserv.
 function closeApp() {
-  window.close();
+  try {
+    eel.quit_app()();
+  } catch (e) {}
+  setTimeout(() => {
+    try {
+      window.close();
+    } catch (e) {}
+  }, 500);
 }
 function exitApp() {
-  window.close();
+  closeApp();
 }
 function hideToTray() {
   eel.hide_to_tray()();

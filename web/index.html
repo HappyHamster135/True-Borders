@@ -200,14 +200,22 @@
 
     <section id="profiles-tab" class="tab-content" style="display:none;">
         <div class="container" style="background: transparent; border: none; box-shadow: none;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; gap: 12px;">
                 <h2 class="neon-title" style="margin: 0;">Saved Profiles</h2>
 
                 <span id="profile-status"
-                    style="color: #ffaa00; font-family: var(--font-body); font-weight: bold; font-size: 14px; opacity: 0; transition: opacity 0.3s; flex-grow: 1; text-align: center; margin: 0 15px;"></span>
+                    style="color: #ffaa00; font-family: var(--font-body); font-weight: bold; font-size: 14px; opacity: 0; transition: opacity 0.3s; flex-grow: 1; text-align: center; margin: 0 5px;"></span>
+
+                <select id="profile-sort" class="profile-sort-select" title="Sort profiles"
+                    onchange="changeProfileSort(this.value)">
+                    <option value="custom">My Order (drag)</option>
+                    <option value="az">A – Z</option>
+                    <option value="added">Recently Added</option>
+                    <option value="used">Last Played</option>
+                </select>
 
                 <input type="text" id="profile-search" placeholder="Search saved profiles..." class="cyber-search-input"
-                    style="width: 250px; margin: 0;">
+                    style="width: 200px; margin: 0;">
             </div>
 
             <div class="profile-list" id="profile-list"></div>
@@ -298,6 +306,21 @@
                                 <button id="latency-boost-btn" class="neon-btn-small" onclick="runSystemOptimize()"
                                     style="padding: 8px 16px; font-size: 13px;">
                                     Apply Boost
+                                </button>
+                            </div>
+                            <div class="setting-row"
+                                style="padding: 15px; border: 1px solid var(--bg-panel); border-radius: 8px; display: flex; justify-content: space-between; align-items: center; margin: 0;">
+                                <div>
+                                    <span class="has-tooltip"
+                                        data-tooltip="Restores the Windows taskbar to its normal state (visible, clickable, no auto-hide). Use this if the taskbar ever gets stuck after a crash."
+                                        style="font-weight: bold; color: var(--accent-1); font-family: var(--font-body);">
+                                        Taskbar Rescue
+                                    </span>
+                                    <small style="color: var(--text-muted); display: block; margin-top: 3px;">Bring back the taskbar if it ever gets stuck hidden.</small>
+                                </div>
+                                <button id="taskbar-fix-btn" class="neon-btn-small" onclick="fixTaskbarNow()"
+                                    style="padding: 8px 16px; font-size: 13px;">
+                                    Fix Taskbar
                                 </button>
                             </div>
                             <div class="setting-row"
@@ -446,8 +469,40 @@
                         <span class="slider"></span>
                     </label>
                 </div>
+
                 <div class="setting-row"
-                    style="margin-top: 20px; padding: 15px; border: 1px solid var(--bg-panel); border-radius: 8px;">
+                    style="margin-top: 15px; padding-top: 15px; border-top: 1px dashed var(--text-muted);">
+                    <span class="has-tooltip"
+                        data-tooltip="Applies this profile automatically as soon as the game is detected. Turn off to only apply it manually."
+                        style="font-weight: bold; color: var(--accent-1);">Auto-Apply on Game Start</span>
+                    <label class="neon-switch">
+                        <input type="checkbox" id="modal-auto-apply" onchange="updateTaskbarSettings()">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+
+                <div class="setting-row">
+                    <span class="has-tooltip"
+                        data-tooltip="Covers the unused screen area around the game with black panels while the game is focused. Perfect for centered games on ultrawide monitors."
+                        style="font-weight: bold; color: var(--accent-1);">Letterbox (Black Out Sides)</span>
+                    <label class="neon-switch">
+                        <input type="checkbox" id="modal-letterbox" onchange="updateTaskbarSettings()">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+
+                <div class="setting-row">
+                    <span class="has-tooltip"
+                        data-tooltip="Keeps the mouse cursor locked inside the game window while the game is focused. Great for edge-scrolling strategy games."
+                        style="font-weight: bold; color: var(--accent-1);">Lock Mouse to Game</span>
+                    <label class="neon-switch">
+                        <input type="checkbox" id="modal-mouse-lock" onchange="updateTaskbarSettings()">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+
+                <div class="setting-row"
+                    style="margin-top: 20px; padding: 15px; border: 1px solid var(--bg-panel); border-radius: 8px; display: block;">
                     <span style="font-weight: bold; color: var(--accent-1); display: block; margin-bottom: 8px;">Game
                         Executable (Auto-Launch)</span>
                     <div style="display: flex; gap: 8px;">
@@ -456,6 +511,15 @@
                             onchange="manuallyUpdateExePath()">
                         <button class="neon-btn-small" onclick="browseForExe()"
                             style="padding: 0 12px; font-size: 12px;">Browse</button>
+                    </div>
+                    <div style="display: flex; gap: 8px; align-items: center; margin-top: 8px;">
+                        <span class="has-tooltip"
+                            data-tooltip="When set, the Play button launches the game through Steam (auto-detected from the exe path). Clear the field to launch the exe directly."
+                            style="font-size: 12px; color: var(--text-muted); white-space: nowrap; cursor: help;">Steam
+                            AppID:</span>
+                        <input type="text" id="modal-steam-appid" placeholder="auto-detected for Steam games"
+                            style="flex: 1; background: var(--bg-darker); color: var(--text-main); border: 1px solid var(--bg-panel); border-radius: 4px; padding: 6px 8px; font-family: var(--font-body); font-size: 12px;"
+                            onchange="manuallyUpdateSteamAppId()">
                     </div>
                     <small id="exe-save-status"
                         style="color: var(--text-muted); display: block; margin-top: 5px; font-size: 11px;"></small>

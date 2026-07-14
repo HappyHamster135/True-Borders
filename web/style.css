@@ -693,8 +693,8 @@ input[type="text"]:focus {
   justify-content: space-between;
   align-items: center;
   background-color: var(--bg-panel);
-  padding: 15px 20px;
-  margin-bottom: 10px;
+  padding: 10px 12px;
+  margin-bottom: 0;
   border-radius: 8px;
   border-left: 4px solid var(--accent-1);
   position: relative;
@@ -703,21 +703,23 @@ input[type="text"]:focus {
     box-shadow 0.2s;
   user-select: none;
   cursor: default;
+  min-width: 0;
 }
 
-/* När ett kort flyttas runt av JS, låt det se smidigt ut */
+/* 2-kolumnsgrid: halverar scrollandet i långa spellistor */
 .profile-list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
 
 /* Gör hela kortet dragbart men visa att man ska hålla i handtaget */
 .drag-handle {
-  padding-right: 15px;
+  padding-right: 10px;
   cursor: grab;
   color: var(--text-muted);
-  font-size: 20px;
+  font-size: 18px;
+  flex-shrink: 0;
 }
 
 .drag-handle:active {
@@ -771,22 +773,75 @@ input[type="text"]:focus {
   text-align: left;
   /* Säkerställer att texten inte är centrerad */
   flex: 1;
+  min-width: 0; /* låter långa namn trunkeras istället för att spränga gridet */
 }
 
 .profile-info h3 {
   margin: 0 0 4px 0;
-  font-size: 1.1em;
+  font-size: 0.98em;
   display: flex;
   align-items: center;
   /* Håller ikonen och texten på samma linje */
   color: var(--text-main);
+  max-width: 100%;
+  min-width: 0;
+}
+
+.profile-info h3 .pname {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .profile-info p {
   margin: 0;
-  font-size: 0.9em;
+  font-size: 0.85em;
   color: var(--text-muted);
   font-family: var(--font-body);
+}
+
+.profile-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* Favorit-stjärnan */
+.star-btn {
+  font-size: 17px;
+  color: var(--text-muted);
+  transition: color 0.15s, transform 0.15s;
+}
+
+.star-btn:hover {
+  color: #e8b93c;
+  transform: scale(1.15);
+}
+
+.star-btn.is-fav {
+  color: #e8b93c;
+  text-shadow: 0 0 8px rgba(232, 185, 60, 0.55);
+}
+
+/* Sorteringsväljaren i Profiles-headern */
+.profile-sort-select {
+  background: var(--bg-panel);
+  color: var(--text-main);
+  border: 1px solid var(--accent-1);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: bold;
+  cursor: pointer;
+  outline: none;
+  flex-shrink: 0;
+}
+
+.profile-sort-select:hover {
+  border-color: var(--accent-2);
 }
 
 /* Om du vill att titeln i tabben också ska vara till vänster */
