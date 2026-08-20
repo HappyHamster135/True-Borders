@@ -24,6 +24,10 @@ import tkinter as tk
 from tkinter import filedialog
 import pywintypes
 
+# Spelspecifika undantag (t.ex. Prison Architect, som låser sin renderyta vid
+# fönsterskapandet). Returnerar oförändrade värden för alla andra spel.
+import game_fixes
+
 # pywebview ger oss ett eget nativt fönster (WebView2) istället för att låna
 # användarens Chrome. Då dör inte appen om man dödar Chrome i Task Manager.
 try:
@@ -37,7 +41,7 @@ except Exception:
 # 1. GLOBALA VARIABLER & INITIALISERING
 # ==============================================================================================
 
-CURRENT_VERSION = "1.3.0"
+CURRENT_VERSION = "1.3.1"
 UPDATE_INFO_URL = "https://raw.githubusercontent.com/HappyHamster135/True-Borders/main/update.json"
 
 tray_icon_instance = None
@@ -892,6 +896,12 @@ def init_borderless(window_title, ui_x=None, ui_y=None, ui_w=None, ui_h=None):
         target_x, target_y = _current_client_origin()
         target_w, target_h = client_rect[2], client_rect[3]
 
+    # Vissa spel (Prison Architect) låser sin renderyta när fönstret skapas och
+    # kan inte fylla hela storleken användaren valt. Måste ske INNAN vi rör
+    # fönsterstilen, då klientytan fortfarande är spelets egen.
+    want_w, want_h = target_w, target_h
+    target_w, target_h = game_fixes.adjust_client_size(hwnd, target_w, target_h)
+
     target_x, target_y = _clamp_to_virtual_screen(target_x, target_y, target_w, target_h)
 
     # Applicera inställningarna
@@ -953,9 +963,13 @@ def init_borderless(window_title, ui_x=None, ui_y=None, ui_w=None, ui_h=None):
             'realX': int(target_x),
             'realY': int(target_y),
             'resW': int(target_w),
-            'resH': int(target_h)
+            'resH': int(target_h),
+            'wantW': int(want_w),
+            'wantH': int(want_h)
         }
     else:
+        # OBS: medvetet utan realX/realY — monitor-loopen ska inte börja
+        # "rätta" fönster som saknar profil (has_coords-kollen).
         active_taskbar_game = {'name': window_title, 'hide': False, 'disable': False,
                                'letterbox': False, 'mouseLock': False}
 
@@ -1046,6 +1060,8 @@ def update_window_pos(window_title, x, y, w, h):
 
     hwnd = find_real_game_window(window_title)
     if hwnd != 0:
+        want_w, want_h = w, h
+        w, h = game_fixes.adjust_client_size(hwnd, w, h)
         flags = 0x0004 | 0x0010 | 0x4000
         success = safe_set_window_pos(hwnd, 0, int(x), int(y), int(w), int(h), flags, window_title)
 
@@ -1063,8 +1079,14 @@ def update_window_pos(window_title, x, y, w, h):
             active_taskbar_game['realY'] = int(y)
             active_taskbar_game['resW'] = int(w)
             active_taskbar_game['resH'] = int(h)
+            active_taskbar_game['wantW'] = int(want_w)
+            active_taskbar_game['wantH'] = int(want_h)
 
 def force_reapply_borderless(hwnd, x, y, w, h):
+    """Sätter tillbaka borderless + geometri. Returnerar den klientstorlek
+    fönstret FAKTISKT fick — anroparen ska spara den, annars kan monitor-loopen
+    tro att fönstret driver och sätta om det tio gånger i sekunden."""
+    w, h = game_fixes.adjust_client_size(hwnd, w, h)
     style = win32gui.GetWindowLong(hwnd, GWL_STYLE)
     if not (style & WS_CAPTION):
         flags = SWP_NOZORDER | win32con.SWP_NOACTIVATE
@@ -1072,10 +1094,16 @@ def force_reapply_borderless(hwnd, x, y, w, h):
     else:
         new_style = style & ~(WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU | 0x00800000)
         win32gui.SetWindowLong(hwnd, GWL_STYLE, new_style)
-        win32gui.SetWindowLong(hwnd, -20, 0) 
-        flags = SWP_FRAMECHANGED | 0x0004 | 0x0400 | 0x0040 
+        win32gui.SetWindowLong(hwnd, -20, 0)
+        flags = SWP_FRAMECHANGED | 0x0004 | 0x0400 | 0x0040
         win32gui.SetWindowPos(hwnd, 0, int(x), int(y), int(w), int(h) + 10, flags)
         win32gui.SetWindowPos(hwnd, 0, int(x), int(y), int(w), int(h), flags)
+
+    try:
+        client = win32gui.GetClientRect(hwnd)
+        return client[2], client[3]
+    except Exception:
+        return int(w), int(h)
 
 @eel.expose
 def force_window_refresh(window_title, x, y, w, h):
@@ -1088,11 +1116,15 @@ def force_window_refresh(window_title, x, y, w, h):
     profile = get_profile(window_title)
     should_be_topmost = profile.get('alwaysOnTop', False) if profile else False
     final_z = win32con.HWND_TOPMOST if should_be_topmost else win32con.HWND_NOTOPMOST
-    
+
     SWP_FLAGS = win32con.SWP_FRAMECHANGED | win32con.SWP_NOACTIVATE
-    
-    # Skapa en liten fönsteruppdatering för att tvinga fram en omritning
-    win32gui.SetWindowPos(hwnd, 0, int(x), int(y), int(w) + 1, int(h) + 1, SWP_FLAGS)
+
+    w, h = game_fixes.adjust_client_size(hwnd, w, h)
+
+    # Skapa en liten fönsteruppdatering för att tvinga fram en omritning.
+    # Spel som låser sin renderyta (PA) blir bara flimrigare av knuffen.
+    if not game_fixes.skip_frame_nudge(hwnd):
+        win32gui.SetWindowPos(hwnd, 0, int(x), int(y), int(w) + 1, int(h) + 1, SWP_FLAGS)
     win32gui.SetWindowPos(hwnd, 0, int(x), int(y), int(w), int(h), SWP_FLAGS)
     
     # Växla z-ordning för att säkerställa att ramfixen fungerar som den ska
@@ -1178,8 +1210,35 @@ def _hide_letterbox():
             pass
 
 
-def _sync_letterbox(game_hwnd, show):
+def _requested_bounds(game_state):
+    """Ytan användaren valde, om spelet inte kunde fylla hela.
+
+    Returnerar (l, t, r, b) när fönstret blev mindre än profilens storlek —
+    då fyller vi mellanrummet med svart så ytan ser hel ut. Returnerar None
+    när fönstret redan är exakt så stort som användaren bad om."""
+    try:
+        want_w = int(game_state.get('wantW') or 0)
+        want_h = int(game_state.get('wantH') or 0)
+        got_w = int(game_state.get('resW') or 0)
+        got_h = int(game_state.get('resH') or 0)
+        if want_w <= got_w and want_h <= got_h:
+            return None
+        x = int(game_state['realX'])
+        y = int(game_state['realY'])
+        return (x, y, x + max(want_w, got_w), y + max(want_h, got_h))
+    except Exception:
+        return None
+
+
+def _sync_letterbox(game_hwnd, show, bounds=None):
     """Skapar/positionerar/visar de svarta panelerna runt spelfönstret.
+
+    bounds = (left, top, right, bottom) begränsar svärtningen till en yta.
+    Utan bounds svärtas hela skärmen runt spelet (letterbox-läget). Med bounds
+    fylls bara skillnaden mellan spelfönstret och den ytan — används när ett
+    spel inte kan rendera hela storleken användaren valt (Prison Architect),
+    så att ytan ser hel ut utan att skrivbordet vid sidan om svartnar.
+
     Får ENDAST anropas från taskbar_monitor-tråden (ägartråd + pump)."""
     global _letterbox_last_layout
 
@@ -1195,7 +1254,7 @@ def _sync_letterbox(game_hwnd, show):
 
     try:
         game_rect = win32gui.GetWindowRect(game_hwnd)
-        mon = _game_monitor_rect(game_hwnd)
+        mon = bounds or _game_monitor_rect(game_hwnd)
         if not mon:
             return
         gl, gt, gr, gb = game_rect
@@ -1858,6 +1917,21 @@ def apply_paradox_resolution(game_title, width, height):
     success, msg = update_paradox_resolution(game_title, int(width), int(height))
     return {"success": success, "message": msg}
 
+@eel.expose
+def prepare_game_resolution(window_title, width, height):
+    """Spel vars fönsterstorlek måste sättas i spelets EGNA inställningar.
+
+    Prison Architect låser renderytan vid start — enda sättet att faktiskt byta
+    storlek är spelets egen upplösning + omstart. Returnerar {} för alla andra
+    spel, så anropet är gratis."""
+    hwnd = find_real_game_window(window_title)
+    if not hwnd:
+        return {}
+    try:
+        return game_fixes.apply_requested_resolution(hwnd, width, height)
+    except Exception:
+        return {}
+
 
 # ==============================================================================================
 # 5.6 TERRARIA-INTEGRATION (config.json display mode -> tvinga äkta windowed)
@@ -2103,13 +2177,18 @@ def taskbar_monitor():
                           f"actual_pos=({cur_x},{cur_y}) "
                           f"target_size=({active_taskbar_game['resW']}x{active_taskbar_game['resH']}) "
                           f"actual_size=({cur_w}x{cur_h})")
-                    force_reapply_borderless(
+                    applied = force_reapply_borderless(
                         hwnd,
                         active_taskbar_game['realX'],
                         active_taskbar_game['realY'],
                         active_taskbar_game['resW'],
                         active_taskbar_game['resH'],
                     )
+                    # Spara det fönstret FAKTISKT blev. Vägrar spelet vår
+                    # storlek (PA klämmer t.ex. mot skärmen) skulle vi annars
+                    # se samma "drift" varje tick och sätta om i all evighet.
+                    if applied:
+                        active_taskbar_game['resW'], active_taskbar_game['resH'] = applied
 
                 foreground_hwnd = win32gui.GetForegroundWindow()
                 is_borderless_now = not (style & WS_CAPTION)
@@ -2121,8 +2200,15 @@ def taskbar_monitor():
                         set_taskbars_state(h_mode, d_mode)
                         taskbar_is_hidden = True
 
-                    # Letterbox: svärta ytan runt spelet medan det har fokus
-                    _sync_letterbox(hwnd, active_taskbar_game.get('letterbox', False) and is_borderless_now)
+                    # Letterbox: svärta ytan runt spelet medan det har fokus.
+                    # Utan letterbox: fyll bara ut till den storlek användaren
+                    # valt om spelet inte kan rendera hela (t.ex. Prison
+                    # Architect) — annars syns skrivbordet i mellanrummet.
+                    if active_taskbar_game.get('letterbox', False) and is_borderless_now:
+                        _sync_letterbox(hwnd, True)
+                    else:
+                        gap = _requested_bounds(active_taskbar_game) if is_borderless_now else None
+                        _sync_letterbox(hwnd, bool(gap), gap)
 
                     # Muslås: håll pekaren inne i spelet (om-appliceras varje
                     # tick eftersom Windows kan nollställa ClipCursor själv)

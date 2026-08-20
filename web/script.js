@@ -373,6 +373,16 @@ async function initMap() {
           statusEl.innerText = "Saved & Applied!";
           statusEl.style.color = "var(--accent-1)";
         }
+
+        // Spel som låser sin renderyta (Prison Architect) måste få storleken
+        // via sina EGNA inställningar + omstart. Returnerar {} för andra spel.
+        const w = parseInt(document.getElementById("resW").value) || 1920;
+        const h = parseInt(document.getElementById("resH").value) || 1080;
+        const note = await eel.prepare_game_resolution(windowName, w, h)();
+        if (note && note.message && statusEl) {
+          statusEl.innerText = note.message;
+          statusEl.style.color = "var(--accent-2)";
+        }
       }
     } else {
       // --- SCENARIO 2: NYTT SPEL — applicera + fråga om sparning ---
