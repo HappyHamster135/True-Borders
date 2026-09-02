@@ -706,6 +706,14 @@ input[type="text"]:focus {
   min-width: 0;
 }
 
+/* Aktiv profil (borderless PÅ): lyfts överst i listan via CSS order —
+   DOM-ordningen (= din sparade sortering) rörs aldrig, så kortet faller
+   tillbaka till sin vanliga plats så fort spelet stängs. */
+.profile-card.is-active {
+  border-left-color: var(--accent-2);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--accent-1) 35%, transparent);
+}
+
 /* 2-kolumnsgrid: halverar scrollandet i långa spellistor */
 .profile-list {
   display: grid;

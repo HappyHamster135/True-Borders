@@ -1526,6 +1526,8 @@ async function loadProfilesTab() {
 
     list.appendChild(card);
   }
+
+  updateActivePinning();
 }
 
 async function handleToggle(event, name) {
@@ -1586,6 +1588,7 @@ async function handleToggle(event, name) {
     checkbox.checked = false;
     alert(`Game "${name}" not found! Make sure it is running.`);
   }
+  updateActivePinning();
 }
 
 async function editProfile(name) {
@@ -2013,6 +2016,21 @@ function update_switch_from_python(gameName, isBorderless) {
   if (checkbox) {
     checkbox.checked = isBorderless;
   }
+  updateActivePinning();
+}
+
+// AKTIVA PROFILER ÖVERST — utan att röra den sparade ordningen.
+// Kortet lyfts med CSS `order` (profillistan är ett grid), så DOM-ordningen
+// — som drag-sorteringen och saveNewOrder läser — är helt orörd. När spelet
+// stängs (toggeln slås av) faller kortet automatiskt tillbaka till sin
+// vanliga plats i listan.
+function updateActivePinning() {
+  document.querySelectorAll(".profile-card").forEach((card) => {
+    const toggle = document.getElementById(`toggle-${card.dataset.name}`);
+    const active = !!(toggle && toggle.checked);
+    card.style.order = active ? "-1" : "";
+    card.classList.toggle("is-active", active);
+  });
 }
 
 eel.expose(notify_blocked_game);
@@ -2494,6 +2512,9 @@ async function autoApplyScanner() {
       }
     }
   }
+
+  // Aktiva profiler flyter till toppen; stängda spel faller tillbaka
+  updateActivePinning();
 }
 
 // Bakgrundsvakt: Kollar om det valda spelet faktiskt har stängts helt.
