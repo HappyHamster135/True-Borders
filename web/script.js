@@ -441,6 +441,7 @@ async function initMap() {
 
   // --- F. AUTO-VÄLJ SPELET NÄR ALLT ÄR REDO ---
   const profiles = await eel.get_all_profiles()();
+  maybeShowOnboarding(profiles);
   const openWindows = Array.from(
     document.querySelectorAll("#custom-options .custom-option span"),
   ).map((span) => span.innerText);
@@ -1403,6 +1404,22 @@ async function loadProfilesTab() {
 
   const draggable = sortMode === "custom";
   list.innerHTML = "";
+
+  // Tomt tillstånd: ny användare ska inte mötas av ett tomt rutnät utan
+  // veta exakt vad nästa steg är.
+  if (entries.length === 0) {
+    const empty = document.createElement("div");
+    empty.style.cssText =
+      "grid-column: 1 / -1; text-align: center; padding: 50px 20px; color: var(--text-muted);";
+    empty.innerHTML =
+      `<div style="font-size: 2.2rem; margin-bottom: 12px;">🎮</div>` +
+      `<div style="font-family: var(--font-heading); color: var(--accent-1); margin-bottom: 8px;">No profiles yet</div>` +
+      `<div style="font-size: 0.9rem; max-width: 380px; margin: 0 auto;">Set up a game on the ` +
+      `<b>Visual Map</b> tab and press <b>Save to Profile</b> — it will show up here ` +
+      `and get borderless automatically every time it starts.</div>`;
+    list.appendChild(empty);
+    return;
+  }
 
   for (const [name, p] of entries) {
     const isRunning = runningKeys.has(name);
@@ -2436,20 +2453,26 @@ async function autoApplyScanner() {
     }
 
     if (!knownRunningGames.has(key) && !manuallyRestoredGames.has(key)) {
-      knownRunningGames.add(key);
-
       const p = profiles[key];
       const isBorderless = await eel.is_borderless(key)();
 
       // Profil med auto-apply avstängt: rör inte spelet, synka bara toggeln
       if (p && p.autoApply === false) {
+        knownRunningGames.add(key);
         const toggleBtn = document.getElementById(`toggle-${key}`);
         if (toggleBtn) toggleBtn.checked = isBorderless;
         continue;
       }
 
       if (!isBorderless) {
-        await eel.init_borderless(key)();
+        // Bocka INTE av spelet förrän det faktiskt lyckades. Ett spel som
+        // just startat ligger och laddar och går inte att flytta än — då
+        // försöker vi igen nästa varv istället för att tappa bort det.
+        // (Samma logik finns i background_auto_apply_scanner i main.py, som
+        // är den som gäller när appfönstret är minimerat.)
+        const applied = await eel.init_borderless(key)();
+        if (!applied) continue;
+        knownRunningGames.add(key);
         await selectGameInVisualMap(key);
 
         if (p && p.alwaysOnTop) await eel.set_game_topmost(key, true)();
@@ -2463,6 +2486,9 @@ async function autoApplyScanner() {
           statusEl.style.color = "var(--accent-1)";
         }
       } else {
+        // Redan borderless (t.ex. adopterat av Python-skannern): bocka av
+        // så vi inte processar om spelet varannan sekund.
+        knownRunningGames.add(key);
         const toggleBtn = document.getElementById(`toggle-${key}`);
         if (toggleBtn) toggleBtn.checked = true;
       }
@@ -2582,12 +2608,49 @@ function hideToTray() {
 //  12. AUTO UPDATER
 // ==========================================================================
 
+// ==========================================================================
+//  11.5 FÖRSTA STARTEN (onboarding-guide)
+// ==========================================================================
+
+function maybeShowOnboarding(profiles) {
+  try {
+    if (localStorage.getItem("onboardingDone")) return;
+    if (profiles && Object.keys(profiles).length > 0) {
+      // Befintlig användare (eller rensad localStorage): visa aldrig guiden
+      localStorage.setItem("onboardingDone", "1");
+      return;
+    }
+    // Vänta tills splash-skärmen tonat bort (2,5 s) innan guiden visas
+    setTimeout(() => {
+      const m = document.getElementById("onboarding-modal");
+      if (m) m.style.display = "flex";
+    }, 2700);
+  } catch (err) {}
+}
+
+function dismissOnboarding() {
+  try {
+    localStorage.setItem("onboardingDone", "1");
+  } catch (err) {}
+  const m = document.getElementById("onboarding-modal");
+  if (m) m.style.display = "none";
+}
+
 async function loadAppVersion() {
   try {
-    // Lägg märke till TVÅ par parenteser: ()()
-    let version = await eel.get_current_version()();
-    let displayEl = document.getElementById("app-version-display");
-    if (displayEl) displayEl.innerText = version;
+    const info = await eel.get_app_info()();
+    const displayEl = document.getElementById("app-version-display");
+    if (displayEl)
+      displayEl.innerText = info.steam
+        ? `${info.version} · Steam Edition`
+        : info.version;
+
+    // Steam-utgåvan uppdateras via Steam-klienten — självuppdateraren är
+    // avstängd i Python, så knappen ska inte ens visas.
+    if (info.steam) {
+      const btn = document.getElementById("update-check-btn");
+      if (btn) btn.style.display = "none";
+    }
   } catch (err) {
     console.error("Kunde inte ladda version:", err);
   }
@@ -2598,7 +2661,7 @@ async function manualUpdateCheck() {
   if (btn.disabled) return;
 
   const originalText = btn.innerText;
-  btn.innerText = "Söker...";
+  btn.innerText = "Checking...";
   btn.disabled = true;
 
   try {
@@ -2606,10 +2669,10 @@ async function manualUpdateCheck() {
     let result = await eel.check_for_updates()();
 
     if (result.update_available) {
-      const msg = `En ny version (v${result.version}) hittades!\n\nVill du ladda ner och installera den nu? Ett separat fönster kommer visa förloppet.`;
+      const msg = `A new version (v${result.version}) is available!\n\nDownload and install it now? A separate window will show the progress.`;
 
       if (confirm(msg)) {
-        btn.innerText = "Startar...";
+        btn.innerText = "Starting...";
 
         // 2. Starta Python-funktionen (vi väntar INTE med await)
         eel.perform_update(result.url)();
@@ -2624,15 +2687,13 @@ async function manualUpdateCheck() {
         btn.disabled = false;
       }
     } else {
-      alert("Du har redan den senaste versionen!");
+      alert("You already have the latest version!");
       btn.innerText = originalText;
       btn.disabled = false;
     }
   } catch (err) {
     console.error(err);
-    alert(
-      "Kunde inte söka efter uppdateringar. Kolla din internetuppkoppling.",
-    );
+    alert("Could not check for updates. Please check your internet connection.");
     btn.innerText = originalText;
     btn.disabled = false;
   }

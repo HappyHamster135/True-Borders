@@ -41,8 +41,29 @@ except Exception:
 # 1. GLOBALA VARIABLER & INITIALISERING
 # ==============================================================================================
 
-CURRENT_VERSION = "1.3.1"
+CURRENT_VERSION = "1.4.0"
 UPDATE_INFO_URL = "https://raw.githubusercontent.com/HappyHamster135/True-Borders/main/update.json"
+
+
+def _detect_steam_build():
+    """True när det här är Steam-utgåvan.
+
+    Steam-bygget får ALDRIG självuppdatera via GitHub — uppdateringar går via
+    Steams eget system, och en app som byter ut sin egen exe under foten på
+    Steam bryter både deras patchflöde och deras policy. Detekteringen går på
+    en markörfil som BARA Steam-spec:en bundlar ("True Borders Steam.spec",
+    källa packaging/steam_edition.marker) — inte på sökvägen, eftersom appen
+    är DRM-fri och användaren får kopiera exe:n vart som helst."""
+    if not getattr(sys, 'frozen', False):
+        return False        # dev-körning från källkod = alltid standalone
+    try:
+        base = getattr(sys, '_MEIPASS', None) or os.path.dirname(sys.executable)
+        return os.path.exists(os.path.join(base, 'steam_edition.marker'))
+    except Exception:
+        return False
+
+
+IS_STEAM_BUILD = _detect_steam_build()
 
 tray_icon_instance = None
 active_taskbar_game = None
@@ -87,6 +108,66 @@ SWP_NOZORDER = 0x0004
 SWP_NOSIZE = 0x0001
 SWP_NOMOVE = 0x0002
 
+# ==============================================================================================
+# 1.5 SÄKRA FÖNSTERMEDDELANDEN (ett främmande fönster får aldrig frysa appen)
+# ==============================================================================================
+# win32gui.SendMessage återvänder först när MOTTAGARENS tråd hämtar meddelandet
+# ur sin kö. Vanliga program gör det hela tiden — men vissa hjälpfönster gör det
+# ALDRIG. BattlEyes launcher (<Spel>_BE.exe, t.ex. ArkAscended_BE.exe i ARK:
+# Survival Ascended) lämnar kvar ett synligt dialogfönster "BattlEye Launcher"
+# hela spelsessionen som aldrig pumpar sin kö.
+#
+# Eel kör ALLA exponerade Python-funktioner som gevent-greenlets i EN tråd, så
+# ett enda blockerat SendMessage fryser hela backend:en. Symptomet var att appen
+# fastnade på splash-skärmen ("den bara laddar") så fort ett BattlEye-spel var
+# igång, eftersom fönsterlistan hämtar ikoner via WM_GETICON.
+#
+# IsHungAppWindow duger INTE som skydd — den svarar "inte hängd" för ett fönster
+# som aldrig hämtat ett enda meddelande (uppmätt på just BattlEye Launcher).
+# Enda pålitliga vägen är SendMessageTimeout.
+
+SMTO_ABORTIFHUNG = 0x0002
+SMTO_ERRORONEXIT = 0x0020
+WM_NULL = 0x0000
+ICON_SMALL2 = 2
+GCLP_HICON = -14
+GCLP_HICONSM = -34
+
+_user32 = ctypes.windll.user32
+_SendMessageTimeoutW = _user32.SendMessageTimeoutW
+_SendMessageTimeoutW.argtypes = [
+    wintypes.HWND, ctypes.c_uint, wintypes.WPARAM, wintypes.LPARAM,
+    ctypes.c_uint, ctypes.c_uint, ctypes.POINTER(ctypes.c_size_t),
+]
+_SendMessageTimeoutW.restype = wintypes.LPARAM
+
+# GetClassLongPtrW finns bara i 64-bitars user32; på 32 bitar ÄR GetClassLongW
+# rätt funktion (samma värde ryms i en LONG där).
+_GetClassLongPtr = getattr(_user32, 'GetClassLongPtrW', _user32.GetClassLongW)
+_GetClassLongPtr.argtypes = [wintypes.HWND, ctypes.c_int]
+_GetClassLongPtr.restype = ctypes.c_size_t
+
+
+def send_message_safe(hwnd, msg, wparam=0, lparam=0, timeout_ms=150):
+    """SendMessage som aldrig kan låsa appen. None = fönstret svarade inte."""
+    result = ctypes.c_size_t(0)
+    try:
+        ok = _SendMessageTimeoutW(hwnd, msg, wparam, lparam,
+                                  SMTO_ABORTIFHUNG | SMTO_ERRORONEXIT,
+                                  timeout_ms, ctypes.byref(result))
+    except Exception:
+        return None
+    return result.value if ok else None
+
+
+def window_is_responsive(hwnd, timeout_ms=250):
+    """Hämtar fönstrets tråd sina meddelanden?
+
+    Är svaret nej blockerar både SendMessage OCH SetWindowPos i all evighet
+    (SetWindowPos skickar WM_WINDOWPOSCHANGING synkront till ägartråden), så
+    då ska vi varken läsa ikonen eller röra fönstret."""
+    return send_message_safe(hwnd, WM_NULL, 0, 0, timeout_ms) is not None
+
 # Sätt upp mappar och filer för appens data
 APP_DATA_DIR = os.path.join(os.environ['APPDATA'], "TrueBorders")
 if not os.path.exists(APP_DATA_DIR):
@@ -94,6 +175,87 @@ if not os.path.exists(APP_DATA_DIR):
 
 PROFILES_FILE = os.path.join(APP_DATA_DIR, "profiles.json")
 SETTINGS_FILE = os.path.join(APP_DATA_DIR, "settings.json")
+LOG_FILE = os.path.join(APP_DATA_DIR, "app.log")
+
+
+class _LogTee:
+    """Skriver appens utskrifter till loggfilen, med tidsstämpel per rad, och
+    vidare till konsolen när en sådan finns (dev-körning)."""
+
+    def __init__(self, stream, fh):
+        self._stream = stream
+        self._fh = fh
+        self._line_start = True
+
+    def write(self, text):
+        try:
+            out = []
+            for ch in str(text):
+                if self._line_start and ch not in "\r\n":
+                    out.append(time.strftime("[%Y-%m-%d %H:%M:%S] "))
+                    self._line_start = False
+                if ch == "\n":
+                    self._line_start = True
+                out.append(ch)
+            self._fh.write("".join(out))
+            self._fh.flush()
+        except Exception:
+            pass
+        if self._stream:
+            try:
+                self._stream.write(text)
+            except Exception:
+                pass
+
+    def flush(self):
+        try:
+            self._fh.flush()
+        except Exception:
+            pass
+        if self._stream:
+            try:
+                self._stream.flush()
+            except Exception:
+                pass
+
+
+def _setup_logging():
+    r"""All output till %APPDATA%\TrueBorders\app.log.
+
+    I den paketerade appen (console=False) är stdout/stderr None, så utan det
+    här försvinner varenda print — och när en betalande kund rapporterar ett
+    fel finns inget att felsöka med. "Skicka app.log" löser det.
+    Får ALDRIG krascha appen: allt i try/except, loggning är bäst-effort."""
+    try:
+        # Enkel rotation: väx aldrig förbi ~1 MB, behåll en generation bakåt
+        try:
+            if os.path.exists(LOG_FILE) and os.path.getsize(LOG_FILE) > 1_000_000:
+                os.replace(LOG_FILE, LOG_FILE + ".old")
+        except Exception:
+            pass
+
+        fh = open(LOG_FILE, "a", encoding="utf-8", errors="replace")
+        sys.stdout = _LogTee(sys.__stdout__, fh)
+        sys.stderr = _LogTee(sys.__stderr__, fh)
+        print(f"--- True Borders {CURRENT_VERSION} startar "
+              f"({'steam' if IS_STEAM_BUILD else 'standalone'}, "
+              f"python {sys.version.split()[0]}) ---")
+
+        # Ohanterade fel (även i trådar) ska alltid hamna i loggen
+        import traceback
+
+        def _log_excepthook(exc_type, exc, tb):
+            print("OHANTERAT FEL:")
+            traceback.print_exception(exc_type, exc, tb)
+
+        sys.excepthook = _log_excepthook
+        threading.excepthook = lambda args: _log_excepthook(
+            args.exc_type, args.exc_value, args.exc_traceback)
+    except Exception:
+        pass
+
+
+_setup_logging()
 REG_PATH = r"Software\Microsoft\Windows\CurrentVersion\Run"
 APP_NAME = "True Borders"
 
@@ -256,6 +418,11 @@ def save_profile(game_name, data):
                 appid = _detect_steam_appid(exe_path)
                 if appid:
                     data['steamAppId'] = appid
+        # Paketerad app (UWP / Game Pass / Microsoft Store)? Spara AUMID —
+        # det är enda sättet att starta dem, och det överlever uppdateringar.
+        aumid = _get_window_aumid(hwnd)
+        if aumid:
+            data['aumid'] = aumid
 
     profiles[game_name].update(data)
     
@@ -421,6 +588,17 @@ def launch_game(game_name):
         except Exception:
             pass  # Steam saknas? Falla tillbaka till exe-start nedan.
 
+    # Paketerade appar (UWP / Game Pass / Microsoft Store) kan inte startas via
+    # exe-sökvägen — WindowsApps är ACL-låst. shell:AppsFolder + AUMID är den
+    # officiella vägen och fungerar för alla paketerade appar.
+    aumid = str(profile.get('aumid') or '').strip()
+    if aumid:
+        try:
+            os.startfile(f"shell:AppsFolder\\{aumid}")
+            return True
+        except Exception:
+            pass    # fall tillbaka till exe-start nedan
+
     exe_path = profile.get('exePath')
     if exe_path and os.path.exists(exe_path):
         try:
@@ -456,13 +634,24 @@ def update_steam_appid(game_name, appid):
     return False
 
 @eel.expose
+def open_app_data_folder():
+    r"""Öppnar %APPDATA%\TrueBorders i Explorer — där app.log och
+    profiles.json ligger. Supportknappen i Settings pekar hit."""
+    try:
+        os.startfile(APP_DATA_DIR)
+        return True
+    except Exception:
+        return False
+
+
+@eel.expose
 def browse_exe():
     root = tk.Tk()
     root.attributes('-topmost', True) 
     root.withdraw() 
     file_path = filedialog.askopenfilename(
-        title="Välj spelets körbara fil",
-        filetypes=[("Körbara filer", "*.exe"), ("Alla filer", "*.*")]
+        title="Select the game's executable",
+        filetypes=[("Executables", "*.exe"), ("All files", "*.*")]
     )
     root.destroy()
     return file_path
@@ -519,6 +708,54 @@ BLACKLISTED_EXES = {
     'idea64.exe', 'sublime_text.exe',
 }
 
+# Anti-cheat-launchers och deras hjälpprocesser. De är ALDRIG spelet — de
+# startar spelet i en egen process — och deras fönster svarar oftast inte på
+# fönstermeddelanden (se avsnitt 1.5). Får varken listas som spel, matchas mot
+# en profil eller manipuleras.
+ANTICHEAT_EXES = {
+    # BattlEye (ARK: Survival Ascended, DayZ, Rust, PUBG, Rainbow Six ...)
+    'beservice.exe', 'bereport.exe', 'be_service.exe', 'battleye.exe',
+    'belauncher.exe', 'belaunchernew.exe',
+    # Easy Anti-Cheat
+    'easyanticheat.exe', 'easyanticheat_setup.exe', 'easyanticheat_eos_setup.exe',
+    'start_protected_game.exe', 'eac_launcher.exe',
+    # Riot Vanguard, nProtect GameGuard, ACE m.fl.
+    'vgtray.exe', 'vgc.exe', 'gameguard.exe', 'gamemon.exe', 'anticheatexpert.exe',
+}
+
+# Anti-cheatens egna installationsmappar. Filnamnen byter de utan förvarning
+# (ARK:s BattlEye-dialog ägdes först av ArkAscended_BE.exe, sedan av
+# %LOCALAPPDATA%\BattlEye\arksa\BELauncherNew.exe) — men mappen består.
+ANTICHEAT_PATH_MARKERS = (
+    '\\battleye\\', '\\easyanticheat\\', '\\easyanticheat_eos\\',
+    '\\eac\\', '\\anticheat\\', '\\punkbuster\\', '\\vanguard\\',
+)
+
+
+def _is_anticheat_exe(exe):
+    """True för anti-cheat-launchers. Tar hela sökvägen ELLER bara filnamnet.
+
+    Tre vägar, eftersom de här filerna heter olika saker i olika spel:
+      1) sökvägen går genom anti-cheatens egen mapp — träffar även launchers
+         med helt egna namn (BELauncherNew.exe)
+      2) känt filnamn (ANTICHEAT_EXES)
+      3) BattlEyes <Spel>_BE.exe- / EACs <Spel>_EAC.exe-konvention, som gör
+         att launchern heter samma sak som spelet"""
+    if not exe:
+        return False
+    exe = exe.lower().replace('/', '\\')
+    if any(marker in exe for marker in ANTICHEAT_PATH_MARKERS):
+        return True
+
+    base = os.path.basename(exe)
+    if base in ANTICHEAT_EXES:
+        return True
+    stem = base[:-4] if base.endswith('.exe') else base
+    return (stem.endswith('_be') or stem.endswith('-be')
+            or stem.endswith('_eac') or stem.endswith('-eac')
+            or stem.startswith('belauncher')
+            or stem.endswith('battleye') or stem.endswith('easyanticheat'))
+
 # Cache: hwnd -> (pid, exe_path). Gör att vi bara behöver köra OpenProcess
 # EN gång per fönster istället för på varje poll (viktigt för mjuk drag).
 _hwnd_exe_cache = {}
@@ -529,10 +766,10 @@ _hwnd_exe_cache = {}
 _window_find_cache = {}
 
 
-def _get_window_exe_path(hwnd):
-    """Returnerar full sökväg till .exe-filen som äger ett fönster (eller None)."""
+def _query_process_image(pid):
+    """Full exe-sökväg för en process. Fungerar även för paketerade appar
+    (WindowsApps/XboxGames) — sökvägssträngen kräver ingen läsrätt på filen."""
     try:
-        _, pid = win32process.GetWindowThreadProcessId(hwnd)
         if not pid:
             return None
         h_process = ctypes.windll.kernel32.OpenProcess(0x1000, False, pid)  # QUERY_LIMITED_INFORMATION
@@ -548,6 +785,107 @@ def _get_window_exe_path(hwnd):
     except Exception:
         pass
     return None
+
+
+def _uwp_core_child(hwnd):
+    """UWP-appar (och äldre Game Pass-spel) renderar i ett CoreWindow-barn som
+    ägs av appens EGEN process, medan toppfönstret ägs av systemets
+    ApplicationFrameHost.exe. Returnerar barnet, eller 0."""
+    found = []
+
+    def cb(h, _):
+        try:
+            if win32gui.GetClassName(h) == "Windows.UI.Core.CoreWindow":
+                found.append(h)
+                return False    # stoppa enumereringen
+        except Exception:
+            pass
+        return True
+
+    try:
+        win32gui.EnumChildWindows(hwnd, cb, None)
+    except Exception:
+        pass    # pywin32 kastar när callbacken stoppar — inget fel
+    return found[0] if found else 0
+
+
+def _resolve_window_process(hwnd):
+    """(pid, exe) för fönstrets RIKTIGA ägare.
+
+    För vanliga fönster: ägarprocessen rakt av. För UWP-ramar: processen bakom
+    CoreWindow-barnet — annars skulle alla UWP-appar se ut att vara samma
+    program (ApplicationFrameHost.exe), profilmatchningen skulle blanda ihop
+    dem och exe-sökvägen i profilen skulle bli meningslös."""
+    try:
+        _, pid = win32process.GetWindowThreadProcessId(hwnd)
+    except Exception:
+        return 0, None
+    if not pid:
+        return 0, None
+    exe = _query_process_image(pid)
+    if exe and os.path.basename(exe).lower() == 'applicationframehost.exe':
+        child = _uwp_core_child(hwnd)
+        if child:
+            try:
+                _, child_pid = win32process.GetWindowThreadProcessId(child)
+            except Exception:
+                child_pid = 0
+            child_exe = _query_process_image(child_pid)
+            if child_exe:
+                return child_pid, child_exe
+    return pid, exe
+
+
+def _get_window_exe_path(hwnd):
+    """Returnerar full sökväg till .exe-filen som äger ett fönster (eller None)."""
+    return _resolve_window_process(hwnd)[1]
+
+
+# Cache: hwnd -> (pid, aumid). AUMID:t är stabilt så länge fönstret lever.
+_aumid_cache = {}
+
+
+def _get_window_aumid(hwnd):
+    """AppUserModelID för paketerade appar — UWP OCH moderna Game Pass-spel
+    (Win32 i MSIX-paket har också paketidentitet). None för vanliga program.
+
+    AUMID:t är det enda pålitliga sättet att STARTA sådana appar (exe:n i
+    WindowsApps går inte att köra direkt), och det överlever appuppdateringar
+    (WindowsApps-sökvägen har versionen i mappnamnet, AUMID:t har det inte)."""
+    try:
+        _, frame_pid = win32process.GetWindowThreadProcessId(hwnd)
+    except Exception:
+        return None
+    cached = _aumid_cache.get(hwnd)
+    if cached is not None and cached[0] == frame_pid:
+        return cached[1]
+
+    aumid = None
+    try:
+        pid, _ = _resolve_window_process(hwnd)
+        h = ctypes.windll.kernel32.OpenProcess(0x1000, False, pid) if pid else None
+        if h:
+            try:
+                length = wintypes.UINT(0)
+                APPMODEL_ERROR_NO_APPLICATION = 15703
+                r = ctypes.windll.kernel32.GetApplicationUserModelId(
+                    h, ctypes.byref(length), None)
+                if r != APPMODEL_ERROR_NO_APPLICATION and length.value:
+                    buf = ctypes.create_unicode_buffer(length.value + 1)
+                    if ctypes.windll.kernel32.GetApplicationUserModelId(
+                            h, ctypes.byref(length), buf) == 0:
+                        aumid = buf.value or None
+            finally:
+                ctypes.windll.kernel32.CloseHandle(h)
+    except Exception:
+        aumid = None
+
+    if len(_aumid_cache) > 512:
+        for h2 in list(_aumid_cache.keys()):
+            if not win32gui.IsWindow(h2):
+                _aumid_cache.pop(h2, None)
+    _aumid_cache[hwnd] = (frame_pid, aumid)
+    return aumid
 
 
 def _get_window_exe_path_cached(hwnd):
@@ -573,7 +911,7 @@ def _get_window_exe_path_cached(hwnd):
 
 def _is_blacklisted_window(hwnd):
     """True om fönstret tillhör oss själva eller en svartlistad process
-    (webbläsare, Explorer, launchers m.m.)."""
+    (webbläsare, Explorer, spel-launchers, anti-cheat m.m.)."""
     try:
         _, pid = win32process.GetWindowThreadProcessId(hwnd)
         if pid == os.getpid():
@@ -581,8 +919,11 @@ def _is_blacklisted_window(hwnd):
     except Exception:
         pass
     exe = _get_window_exe_path_cached(hwnd)
-    if exe and os.path.basename(exe).lower() in BLACKLISTED_EXES:
-        return True
+    if exe:
+        if os.path.basename(exe).lower() in BLACKLISTED_EXES:
+            return True
+        if _is_anticheat_exe(exe):     # hela sökvägen — mappen avslöjar dem
+            return True
     return False
 
 
@@ -619,6 +960,14 @@ def _enum_candidate_windows():
     def cb(hwnd, _):
         if not win32gui.IsWindowVisible(hwnd):
             return True
+        # UE:s splashfonster ags av SAMMA exe som spelet, bar spelets namn och
+        # saknar ram — det passerar alla andra filter och kan cachas som
+        # spelfonstret. Klassnamnet ar det enda som avslojar det.
+        try:
+            if win32gui.GetClassName(hwnd) == 'SplashScreenClass':
+                return True
+        except Exception:
+            pass
         title = win32gui.GetWindowText(hwnd).strip()
         if not title or title in EXACT_IGNORE:
             return True
@@ -702,6 +1051,7 @@ def find_window_for_profile(profile_name, profiles=None, candidates=None):
     saved_exe = profile.get('exePath')
     saved_exe_norm = os.path.normcase(saved_exe) if saved_exe else None
     saved_exe_base = os.path.basename(saved_exe).lower() if saved_exe else None
+    saved_aumid = profile.get('aumid')
     saved_icon = profile.get('icon')
 
     best_hwnd, best_score, best_area = 0, -1, -1
@@ -723,6 +1073,14 @@ def find_window_for_profile(profile_name, profiles=None, candidates=None):
                     score += 180
                 else:
                     exe_state = 'mismatch'
+
+        # 1b) Paketerad app: AUMID:t är stabilt även när exe-sökvägen byter
+        #     version (WindowsApps har versionen i mappnamnet). Räknas som
+        #     full träff. Kollas bara för profiler som HAR ett AUMID.
+        if saved_aumid and exe_state != 'full':
+            if _get_window_aumid(hwnd) == saved_aumid:
+                exe_state = 'full'
+                score += 250
 
         # 2) Titel (snabb men opålitlig)
         if name_l and title_l == name_l:
@@ -767,6 +1125,11 @@ def find_real_game_window(search_title):
     found_hwnds = []
     def callback(hwnd, _):
         if win32gui.IsWindowVisible(hwnd):
+            try:
+                if win32gui.GetClassName(hwnd) == 'SplashScreenClass':
+                    return True    # UE-splash — aldrig spelet (se _enum_candidate_windows)
+            except Exception:
+                pass
             title = win32gui.GetWindowText(hwnd).strip()
             # Ignorera systemfönster, webbläsare och overlays
             if not title or title in EXACT_IGNORE or any(sub in title for sub in SUBSTRING_IGNORE):
@@ -864,6 +1227,13 @@ def init_borderless(window_title, ui_x=None, ui_y=None, ui_w=None, ui_h=None):
     if _is_blacklisted_window(hwnd):
         return False
 
+    # Säkerhetsspärr 2: SetWindowPos skickar WM_WINDOWPOSCHANGING synkront till
+    # fönstrets ägartråd. Hämtar den aldrig sina meddelanden återvänder anropet
+    # aldrig, och hela UI:t fryser (se avsnitt 1.5).
+    if not window_is_responsive(hwnd, 400):
+        print(f"[INIT] '{window_title}' svarar inte på fönstermeddelanden — hoppar över")
+        return False
+
     profile = get_profile(window_title)
     rect = win32gui.GetWindowRect(hwnd)
     client_rect = win32gui.GetClientRect(hwnd)
@@ -921,6 +1291,9 @@ def init_borderless(window_title, ui_x=None, ui_y=None, ui_w=None, ui_h=None):
     global last_intentional_move_ts
     last_intentional_move_ts = time.time()
 
+    # Slår man på borderless igen gäller inte "rör inte spelet" längre
+    _auto_apply_optout.pop(window_title, None)
+
     # Läk profilen: spara exe-sökväg och position om de saknas, så gamla
     # profiler blir robusta och alltid applicerar på rätt plats nästa gång.
     global active_taskbar_game
@@ -936,6 +1309,11 @@ def init_borderless(window_title, ui_x=None, ui_y=None, ui_w=None, ui_h=None):
                         appid = _detect_steam_appid(exe_path)
                         if appid:
                             profile['steamAppId'] = appid
+            if 'aumid' not in profile:
+                aumid = _get_window_aumid(hwnd)
+                if aumid:
+                    profile['aumid'] = aumid
+                    profile_changed = True
             if profile.get('realX') is None or profile.get('realY') is None:
                 profile['realX'] = int(target_x)
                 profile['realY'] = int(target_y)
@@ -996,9 +1374,17 @@ def restore_borders(window_title):
     hwnd = find_real_game_window(window_title)
     if hwnd == 0:
         return False
-        
+
+    if not window_is_responsive(hwnd, 400):
+        return False
+
+    # Användaren vill ha ramen tillbaka. Auto-apply-skannern (avsnitt 6)
+    # försöker om varje varv tills den lyckas, så utan den här markeringen
+    # skulle den slå på borderless igen inom 2,5 sekunder.
+    _auto_apply_optout[window_title] = hwnd
+
     style = win32gui.GetWindowLong(hwnd, GWL_STYLE)
-    
+
     rect = win32gui.GetWindowRect(hwnd)
     curr_x = rect[0]
     curr_y = rect[1]
@@ -1110,9 +1496,11 @@ def force_window_refresh(window_title, x, y, w, h):
     if any(v is None for v in [x, y, w, h]): 
         return 
     hwnd = find_real_game_window(window_title)
-    if not hwnd: 
+    if not hwnd:
         return
-    
+    if not window_is_responsive(hwnd, 400):
+        return
+
     profile = get_profile(window_title)
     should_be_topmost = profile.get('alwaysOnTop', False) if profile else False
     final_z = win32con.HWND_TOPMOST if should_be_topmost else win32con.HWND_NOTOPMOST
@@ -1325,6 +1713,10 @@ def _release_cursor_clip():
 EXACT_IGNORE = ["Program Manager", "Settings", "Microsoft Text Input Application", "Windows Input Experience", "True Borders", "Task Manager", "Aktivitetshanteraren"]
 SUBSTRING_IGNORE = [
     "Overlay", "Default IME",
+    # Anti-cheat-launchers är aldrig spelet och svarar inte på meddelanden
+    # (se avsnitt 1.5). Titelfiltret körs före exe-uppslaget, så det biter
+    # även när OpenProcess nekas mot en skyddad process.
+    "BattlEye Launcher", "EasyAntiCheat", "Easy Anti-Cheat",
     " - Opera", " - Google Chrome", " - Mozilla Firefox",
     " - Microsoft Edge", " - Brave", " - Vivaldi",
     " - YouTube",        # YouTube-tabs som kan ha snälla titlar
@@ -1391,45 +1783,235 @@ def get_window_icon_base64(window_title):
         return None
     return get_icon_base64(hwnd)
     
-def get_icon_base64(hwnd):
-    try:
-        hicon = win32gui.SendMessage(hwnd, win32con.WM_GETICON, win32con.ICON_BIG, 0)
-        if hicon == 0:
-            hicon = win32gui.SendMessage(hwnd, win32con.WM_GETICON, win32con.ICON_SMALL, 0)
-        if hicon == 0:
-            hicon = win32gui.GetClassLong(hwnd, win32con.GCL_HICON)
-        if hicon == 0:
-            return None
+# hwnd -> (pid, ikon-base64 eller None). En fönsterikon ändras i praktiken
+# aldrig under en session, och utan cache skickas ett WM_GETICON per profil
+# varje gång profillistan uppdateras.
+_icon_cache = {}
 
-        hdc = win32ui.CreateDCFromHandle(win32gui.GetDC(0))
+
+def _extract_exe_icon(hwnd):
+    """Ikonen ur programmets exe-fil. Sista utvägen — den fungerar även för
+    fönster som inte svarar på meddelanden. Den HÄR ikonen äger vi själva."""
+    exe = _get_window_exe_path_cached(hwnd)
+    if not exe:
+        return 0
+    try:
+        large = (wintypes.HICON * 1)()
+        small = (wintypes.HICON * 1)()
+        if ctypes.windll.shell32.ExtractIconExW(
+                ctypes.c_wchar_p(exe), 0, large, small, 1):
+            return large[0] or small[0]
+    except Exception:
+        pass
+    return 0
+
+
+def _window_icon_handle(hwnd):
+    """Returnerar (HICON, äger_vi_den).
+
+    WM_GETICON går via SendMessage och MÅSTE ha timeout — annars räcker ett
+    enda fönster som aldrig pumpar sin kö (BattlEyes launcher) för att frysa
+    hela appen. Fönster- och klassikoner ägs av det andra programmet och får
+    ALDRIG förstöras; gamla koden anropade DestroyIcon på dem."""
+    if window_is_responsive(hwnd, 120):
+        for which in (win32con.ICON_BIG, ICON_SMALL2, win32con.ICON_SMALL):
+            hicon = send_message_safe(hwnd, win32con.WM_GETICON, which, 0, 120)
+            if hicon:
+                return hicon, False
+
+    # UWP-ram: ramens egna ikoner är generiska — appens riktiga ikon (om någon)
+    # sitter på CoreWindow-barnet. Exe-extraktion fungerar inte heller
+    # (WindowsApps är ACL-låst), så barnet är bästa chansen.
+    core = _uwp_core_child(hwnd)
+    if core and window_is_responsive(core, 120):
+        for which in (win32con.ICON_BIG, ICON_SMALL2, win32con.ICON_SMALL):
+            hicon = send_message_safe(core, win32con.WM_GETICON, which, 0, 120)
+            if hicon:
+                return hicon, False
+
+    for index in (GCLP_HICON, GCLP_HICONSM):
+        try:
+            hicon = _GetClassLongPtr(hwnd, index)
+        except Exception:
+            hicon = 0
+        if hicon:
+            return hicon, False
+
+    return _extract_exe_icon(hwnd), True
+
+
+def _icon_to_base64(hicon):
+    """Ritar en HICON till en 32x32 PNG-data-URL.
+
+    Skärm-DC:n frigörs alltid — gamla koden skrev över variabeln med den
+    kompatibla DC:n och läckte därmed en GDI-handle per ikonhämtning."""
+    screen_dc = win32gui.GetDC(0)
+    mem_dc = None
+    hbmp = None
+    try:
+        src_dc = win32ui.CreateDCFromHandle(screen_dc)
         hbmp = win32ui.CreateBitmap()
-        hbmp.CreateCompatibleBitmap(hdc, 32, 32)
-        hdc = hdc.CreateCompatibleDC()
-        hdc.SelectObject(hbmp)
-        
-        win32gui.DrawIconEx(hdc.GetHandleOutput(), 0, 0, hicon, 32, 32, 0, None, win32con.DI_NORMAL)
+        hbmp.CreateCompatibleBitmap(src_dc, 32, 32)
+        mem_dc = src_dc.CreateCompatibleDC()
+        mem_dc.SelectObject(hbmp)
+
+        win32gui.DrawIconEx(mem_dc.GetHandleOutput(), 0, 0, hicon, 32, 32, 0,
+                            None, win32con.DI_NORMAL)
 
         bmpinfo = hbmp.GetInfo()
         bmpstr = hbmp.GetBitmapBits(True)
-        img = Image.frombuffer('RGBA', (bmpinfo['bmWidth'], bmpinfo['bmHeight']), bmpstr, 'raw', 'BGRA', 0, 1)
-
-        try: 
-            win32gui.DestroyIcon(hicon)
-        except Exception: 
-            pass 
-            
-        try:
-            hdc.DeleteDC()
-            win32gui.DeleteObject(hbmp.GetHandle())
-        except Exception:
-            pass
+        img = Image.frombuffer('RGBA', (bmpinfo['bmWidth'], bmpinfo['bmHeight']),
+                               bmpstr, 'raw', 'BGRA', 0, 1)
 
         buffered = BytesIO()
         img.save(buffered, format="PNG")
         img_str = base64.b64encode(buffered.getvalue()).decode()
         return f"data:image/png;base64,{img_str}"
+    finally:
+        try:
+            if mem_dc:
+                mem_dc.DeleteDC()
+        except Exception:
+            pass
+        try:
+            if hbmp:
+                win32gui.DeleteObject(hbmp.GetHandle())
+        except Exception:
+            pass
+        try:
+            win32gui.ReleaseDC(0, screen_dc)
+        except Exception:
+            pass
+
+
+def _shell_app_icon_base64(aumid, px=32):
+    """Ikonen för en paketerad app (UWP / Game Pass / Microsoft Store) som
+    PNG-data-URL, via Shellens AppsFolder — samma bildkälla som Start-menyn.
+
+    Behövs eftersom de vanliga vägarna är stängda för paketerade appar:
+    fönstren svarar inte på WM_GETICON, klassikonerna är generiska och
+    ExtractIconExW stoppas av ACL:en på WindowsApps. Shellen läser appens
+    logo-PNG åt oss utan att vi behöver filrättigheterna."""
+    try:
+        ole32 = ctypes.windll.ole32
+        shell32 = ctypes.windll.shell32
+        gdi32 = ctypes.windll.gdi32
+
+        class _GUID(ctypes.Structure):
+            _fields_ = [("d1", ctypes.c_uint32), ("d2", ctypes.c_uint16),
+                        ("d3", ctypes.c_uint16), ("d4", ctypes.c_ubyte * 8)]
+
+        # IShellItemImageFactory {bcc18b79-ba16-442f-80c4-8a59c30c463b}
+        iid = _GUID(0xbcc18b79, 0xba16, 0x442f,
+                    (ctypes.c_ubyte * 8)(0x80, 0xc4, 0x8a, 0x59, 0xc3, 0x0c, 0x46, 0x3b))
+
+        # S_FALSE/RPC_E_CHANGED_MODE = redan initierat (av pywebview/pystray) — ofarligt
+        try:
+            ole32.CoInitialize(None)
+        except OSError:
+            pass
+
+        factory = ctypes.c_void_p()
+        hr = shell32.SHCreateItemFromParsingName(
+            ctypes.c_wchar_p("shell:AppsFolder\\" + aumid), None,
+            ctypes.byref(iid), ctypes.byref(factory))
+        if hr != 0 or not factory:
+            return None
+
+        class _SIZE(ctypes.Structure):
+            _fields_ = [("cx", ctypes.c_long), ("cy", ctypes.c_long)]
+
+        try:
+            # vtabell: 0 QueryInterface, 1 AddRef, 2 Release, 3 GetImage
+            vtbl = ctypes.cast(
+                factory, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p))).contents
+            get_image = ctypes.WINFUNCTYPE(
+                ctypes.c_long, ctypes.c_void_p, _SIZE, ctypes.c_int,
+                ctypes.POINTER(wintypes.HBITMAP))(vtbl[3])
+
+            hbm = wintypes.HBITMAP()
+            SIIGBF_ICONONLY = 0x4
+            if get_image(factory, _SIZE(px, px), SIIGBF_ICONONLY,
+                         ctypes.byref(hbm)) != 0 or not hbm:
+                return None
+        finally:
+            ctypes.WINFUNCTYPE(ctypes.c_ulong, ctypes.c_void_p)(vtbl[2])(factory)
+
+        try:
+            class _BITMAP(ctypes.Structure):
+                _fields_ = [("bmType", ctypes.c_long), ("bmWidth", ctypes.c_long),
+                            ("bmHeight", ctypes.c_long), ("bmWidthBytes", ctypes.c_long),
+                            ("bmPlanes", ctypes.c_ushort), ("bmBitsPixel", ctypes.c_ushort),
+                            ("bmBits", ctypes.c_void_p)]
+
+            bm = _BITMAP()
+            if not gdi32.GetObjectW(hbm, ctypes.sizeof(_BITMAP), ctypes.byref(bm)):
+                return None
+            if not bm.bmBits or bm.bmBitsPixel != 32:
+                return None    # ingen DIB-sektion — förväntas inte hända
+
+            raw = ctypes.string_at(bm.bmBits, bm.bmWidthBytes * bm.bmHeight)
+            img = Image.frombuffer('RGBA', (bm.bmWidth, bm.bmHeight), raw,
+                                   'raw', 'BGRA', bm.bmWidthBytes, 1)
+            if (bm.bmWidth, bm.bmHeight) != (32, 32):
+                img = img.resize((32, 32), Image.LANCZOS)
+
+            buffered = BytesIO()
+            img.save(buffered, format="PNG")
+            return f"data:image/png;base64,{base64.b64encode(buffered.getvalue()).decode()}"
+        finally:
+            try:
+                gdi32.DeleteObject(hbm)
+            except Exception:
+                pass
     except Exception:
         return None
+
+
+def get_icon_base64(hwnd):
+    """Fönstrets ikon som PNG-data-URL, eller None.
+
+    Anropas i loopar över ALLA öppna fönster (fönsterlistan, profilfliken) och
+    får därför aldrig blockera: ett enda fönster som inte hämtar sina
+    meddelanden frös tidigare hela appen på splash-skärmen. Se avsnitt 1.5."""
+    try:
+        _, pid = win32process.GetWindowThreadProcessId(hwnd)
+    except Exception:
+        pid = 0
+
+    cached = _icon_cache.get(hwnd)
+    if cached is not None and cached[0] == pid:
+        return cached[1]
+
+    icon = None
+    try:
+        hicon, owned = _window_icon_handle(hwnd)
+        if hicon:
+            try:
+                icon = _icon_to_base64(hicon)
+            finally:
+                if owned:
+                    try:
+                        win32gui.DestroyIcon(hicon)
+                    except Exception:
+                        pass
+    except Exception:
+        icon = None
+
+    # Paketerad app utan vanlig fönsterikon? Hämta appens logo via Shellen.
+    if icon is None:
+        aumid = _get_window_aumid(hwnd)
+        if aumid:
+            icon = _shell_app_icon_base64(aumid)
+
+
+    # Håll cachen liten: rensa döda fönster om den växer
+    if len(_icon_cache) > 512:
+        for h in list(_icon_cache.keys()):
+            if not win32gui.IsWindow(h):
+                _icon_cache.pop(h, None)
+    _icon_cache[hwnd] = (pid, icon)
+    return icon
 
 # ==============================================================================================
 # 5. TASKBAR, HOTKEYS & OPTIMIZATIONS
@@ -2024,8 +2606,18 @@ def get_terraria_display_status(game_name):
 # ==============================================================================================
 
 @eel.expose
+def get_app_info():
+    """Version + utgåva till UI:t (Steam-utgåvan döljer uppdateringsknappen)."""
+    return {"version": CURRENT_VERSION, "steam": IS_STEAM_BUILD}
+
+
+@eel.expose
 def check_for_updates():
     """Kollar om det finns en nyare version av appen tillgänglig via GitHub."""
+    # Steam-utgåvan uppdateras av Steam-klienten — fråga inte ens GitHub,
+    # annars skulle vi be användaren självuppdatera förbi Steams patchflöde.
+    if IS_STEAM_BUILD:
+        return {"update_available": False, "steam": True}
     try:
         req = urllib.request.urlopen(UPDATE_INFO_URL, timeout=5)
         data = json.loads(req.read().decode('utf-8'))
@@ -2047,6 +2639,8 @@ update_triggered = False
 
 @eel.expose
 def perform_update(download_url):
+    if IS_STEAM_BUILD:
+        return False    # Steam sköter uppdateringar
     try:
         current_exe = sys.executable
         
@@ -2075,6 +2669,32 @@ def perform_update(download_url):
         ctypes.windll.user32.MessageBoxW(0, f"Kunde inte köra updater: {str(e)}", "Systemfel", 0x10)
         return False
     
+def _tray_icon_image():
+    """Logotypen for tray-ikonen. Bundlas av spec:arna (tb_icon_64.png);
+    i dev-korning las den fran packaging/. Faller tillbaka pa den gamla
+    ritade rektangeln om filen saknas — trayn far aldrig krascha."""
+    candidates = []
+    try:
+        if getattr(sys, 'frozen', False):
+            base = getattr(sys, '_MEIPASS', None) or os.path.dirname(sys.executable)
+            candidates.append(os.path.join(base, 'tb_icon_64.png'))
+        else:
+            candidates.append(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                           'packaging', 'tb_icon_64.png'))
+    except Exception:
+        pass
+    for path in candidates:
+        try:
+            if os.path.exists(path):
+                return Image.open(path).convert('RGBA')
+        except Exception:
+            pass
+    image = Image.new('RGB', (64, 64), color=(15, 32, 39))
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((16, 16, 48, 48), fill=(8, 217, 214), outline=(255, 46, 99), width=4)
+    return image
+
+
 @eel.expose
 def hide_to_tray():
     global tray_icon_instance
@@ -2088,10 +2708,8 @@ def hide_to_tray():
         if tray_icon_instance is not None: 
             return 
             
-        image = Image.new('RGB', (64, 64), color=(15, 32, 39))
-        draw = ImageDraw.Draw(image)
-        draw.rectangle((16, 16, 48, 48), fill=(8, 217, 214), outline=(255, 46, 99), width=4)
-        
+        image = _tray_icon_image()
+
         def show_window(icon, item):
             global tray_icon_instance
             icon.stop() 
@@ -2104,8 +2722,8 @@ def hide_to_tray():
             shutdown_app()
 
         menu = pystray.Menu(
-            pystray.MenuItem("Visa True-Borders", show_window, default=True),
-            pystray.MenuItem("Avsluta helt", quit_app)
+            pystray.MenuItem("Open True Borders", show_window, default=True),
+            pystray.MenuItem("Quit", quit_app)
         )
         
         tray_icon_instance = pystray.Icon("True-Borders", image, "True-Borders", menu)
@@ -2114,6 +2732,8 @@ def hide_to_tray():
 def taskbar_monitor():
     global taskbar_is_hidden, active_taskbar_game
     poll_counter = 0
+    reassert_counter = 0
+    find_miss_count = 0
     while True:
         time.sleep(0.1)
         try:
@@ -2142,8 +2762,9 @@ def taskbar_monitor():
                 
             game_name = active_taskbar_game['name']
             hwnd = find_real_game_window(game_name)
-            
+
             if hwnd != 0:
+                find_miss_count = 0
                 style = win32gui.GetWindowLong(hwnd, GWL_STYLE)
                 rect = win32gui.GetWindowRect(hwnd)
                 has_coords = 'realY' in active_taskbar_game
@@ -2199,6 +2820,21 @@ def taskbar_monitor():
                     if (h_mode or d_mode) and not taskbar_is_hidden:
                         set_taskbars_state(h_mode, d_mode)
                         taskbar_is_hidden = True
+                    elif d_mode and taskbar_is_hidden:
+                        # Explorer kan visa taskbaren igen pa eget bevag
+                        # (notiser, explorer-omstart). Flaggan sager "dold"
+                        # sa utan den har kollen skulle den aldrig tas
+                        # tillbaka. Kolla ~1 ggr/sekund, inte varje tick.
+                        reassert_counter += 1
+                        if reassert_counter >= 10:
+                            reassert_counter = 0
+                            try:
+                                tray = win32gui.FindWindow("Shell_TrayWnd", None)
+                                if tray and win32gui.IsWindowVisible(tray):
+                                    print("[MONITOR] taskbaren kom tillbaka av sig sjalv — doljer igen")
+                                    set_taskbars_state(h_mode, d_mode)
+                            except Exception:
+                                pass
 
                     # Letterbox: svärta ytan runt spelet medan det har fokus.
                     # Utan letterbox: fyll bara ut till den storlek användaren
@@ -2224,31 +2860,72 @@ def taskbar_monitor():
                     _sync_letterbox(hwnd, False)
                     _release_cursor_clip()
             else:
+                # Debounce: UE-spel blir kort OSYNLIGA vid mode-byten och
+                # device-resets, och da returnerar find_real_game_window 0 en
+                # eller ett par tickar fast fonstret lever vidare med samma
+                # handtag. Slappte vi spelet direkt vore total hide dott for
+                # resten av sessionen — skannern ateradopterar namligen inte
+                # ett oforandrat hwnd. Krav darfor ~1 s i rad av missar.
+                find_miss_count += 1
+                if find_miss_count < 10:
+                    continue
+
                 if taskbar_is_hidden:
                     set_taskbars_state(False, False)
                     taskbar_is_hidden = False
                 _sync_letterbox(None, False)
                 _release_cursor_clip()
+                # Slappt pa riktigt: glom aven skannerns bock sa spelet kan
+                # ateradopteras om fonstret dyker upp igen (samma hwnd).
+                try:
+                    known_auto_applied_games.pop(active_taskbar_game.get('name'), None)
+                except Exception:
+                    pass
                 active_taskbar_game = None
         except Exception:
             pass
 
-known_auto_applied_games = set()
+# profilnamn -> hwnd som redan är färdigbehandlat. Nyckeln är fönsterhandtaget,
+# inte bara namnet: byter spelet fönster (laddningsfönster -> riktig renderyta,
+# eller mode-byte) ska det nya fönstret behandlas på nytt.
+known_auto_applied_games = {}
+
+# profilnamn -> hwnd där ANVÄNDAREN själv tryckt "Restore Borders". Skannern
+# försöker numera om tills den lyckas, så utan det här skulle den slå tillbaka
+# borderless direkt efter att man stängt av det.
+_auto_apply_optout = {}
+
+# (profilnamn, hwnd) -> när vi först såg fönstret. Används bara för att kunna
+# ge upp till slut.
+_auto_apply_since = {}
+
+# Ett spel som fortfarande laddar hämtar inte sina fönstermeddelanden och går
+# inte att flytta än. ARK kan ladda i flera minuter, så vi ger gott om tid
+# innan vi slutar försöka.
+AUTO_APPLY_GIVE_UP_SECONDS = 600
+
 
 def background_auto_apply_scanner():
-    global known_auto_applied_games
+    """Slår på borderless automatiskt när ett spel med profil dyker upp.
+
+    Den HÄR skannern är den enda som kör när appfönstret är minimerat eller
+    ligger i tray:t — UI:ts egen scanner i script.js fryser då, eftersom
+    WebView2 stryper setInterval i dolda fönster. Därför måste den vara
+    självförsörjande OCH tåla att spelet inte är redo direkt."""
     while True:
         time.sleep(2.5)
         try:
             profiles = get_all_profiles()
             if not profiles:
                 known_auto_applied_games.clear()
+                _auto_apply_optout.clear()
+                _auto_apply_since.clear()
                 continue
 
             # Hitta alla profiler med levande fönster i ETT svep (kandidatlistan
             # byggs en gång istället för en gång per profil).
             candidates = None
-            alive = set()
+            alive = {}
             for name in profiles:
                 hwnd = _cached_window_for(name)
                 if not hwnd:
@@ -2257,32 +2934,65 @@ def background_auto_apply_scanner():
                     hwnd = find_window_for_profile(name, profiles, candidates)
                 if hwnd:
                     _remember_window(name, hwnd)
-                    alive.add(name)
+                    alive[name] = hwnd
 
-            # Behåll bara spel som fortfarande har ett levande fönster
-            known_auto_applied_games &= alive
+            # Glöm spel vars fönster försvunnit eller bytt handtag
+            for store in (known_auto_applied_games, _auto_apply_optout):
+                for name in list(store):
+                    if alive.get(name) != store[name]:
+                        store.pop(name, None)
+            for key in list(_auto_apply_since):
+                if alive.get(key[0]) != key[1]:
+                    _auto_apply_since.pop(key, None)
 
-            for prof_name in profiles:
-                if prof_name in known_auto_applied_games:
+            for name, hwnd in alive.items():
+                if known_auto_applied_games.get(name) == hwnd:
                     continue
-                if prof_name not in alive:
+                if _auto_apply_optout.get(name) == hwnd:
                     continue
-
-                known_auto_applied_games.add(prof_name)
 
                 # Profilen har auto-apply avstängt — rör inte spelet
-                if profiles[prof_name].get('autoApply', True) is False:
+                if profiles[name].get('autoApply', True) is False:
+                    known_auto_applied_games[name] = hwnd
                     continue
 
-                if not is_borderless(prof_name):
-                    print(f"[SCANNER] init_borderless for {prof_name}")
-                    init_borderless(prof_name)
-                    if profiles[prof_name].get('alwaysOnTop'):
-                        set_game_topmost(prof_name, True)
+                # OBS: INGEN genvag for spel som redan ar borderless. Spel som
+                # STARTAR utan ram (UE:s WindowedFullscreen — t.ex. Rematch —
+                # eller spel som minns sitt lage) hoppade forr over hela
+                # init-steget. Da sattes active_taskbar_game aldrig, och
+                # taskbar-doljning, letterbox, muslas och positionsvakten var
+                # dda for dem. init_borderless ar idempotent for ett redan
+                # ramlost fonster: den satter bara profilens geometri och
+                # registrerar spelet hos monitorn — precis adoptionen vi vill ha.
+
+                first_try = (name, hwnd) not in _auto_apply_since
+                since = _auto_apply_since.setdefault((name, hwnd), time.time())
+                if first_try:
+                    print(f"[SCANNER] auto-apply: {name}")
+
+                # KRITISKT: markera INTE som klart förrän det faktiskt lyckades.
+                # Ett spel som just startat ligger och laddar och hämtar inga
+                # fönstermeddelanden — då går det inte att göra borderless ännu.
+                # Tidigare bockades spelet av redan innan försöket, så det enda
+                # försöket gick förlorat och spelet fick ALDRIG borderless. Med
+                # UI:t öppet märktes det sällan; minimerat fanns ingen som helst
+                # räddning eftersom script.js-skannern är fryst då.
+                if init_borderless(name):
+                    known_auto_applied_games[name] = hwnd
+                    waited = time.time() - since
+                    if waited > 2.5:
+                        print(f"[SCANNER] {name} applicerad efter "
+                              f"{waited:.0f} s (spelet laddade)")
+                    if profiles[name].get('alwaysOnTop'):
+                        set_game_topmost(name, True)
                     try:
-                        eel.update_switch_from_python(prof_name, True)
+                        eel.update_switch_from_python(name, True)
                     except Exception:
                         pass
+                elif time.time() - since > AUTO_APPLY_GIVE_UP_SECONDS:
+                    print(f"[SCANNER] ger upp auto-apply för {name} — fönstret "
+                          f"svarade inte på {AUTO_APPLY_GIVE_UP_SECONDS} s")
+                    known_auto_applied_games[name] = hwnd
         except Exception:
             pass
 
@@ -2519,11 +3229,9 @@ def open_tb_window():
 def setup_tray_ninja():
     """Skapar bakgrundsikonen utan att visa fönstret direkt."""
     global tray_icon_instance
-    
-    image = Image.new('RGB', (64, 64), color=(15, 32, 39))
-    draw = ImageDraw.Draw(image)
-    draw.rectangle((16, 16, 48, 48), fill=(8, 217, 214), outline=(255, 46, 99), width=4)
-    
+
+    image = _tray_icon_image()
+
     def on_show(icon, item):
         if is_window_open:
             # Fönstret finns redan — hämta fram det (bara Win32-anrop, trådsäkert)
@@ -2537,8 +3245,8 @@ def setup_tray_ninja():
         shutdown_app()
 
     menu = pystray.Menu(
-        pystray.MenuItem("Öppna True Borders", on_show, default=True),
-        pystray.MenuItem("Avsluta helt", on_quit)
+        pystray.MenuItem("Open True Borders", on_show, default=True),
+        pystray.MenuItem("Quit", on_quit)
     )
     
     tray_icon_instance = pystray.Icon("TrueBordersNinja", image, "True Borders", menu)

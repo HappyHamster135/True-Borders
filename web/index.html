@@ -36,8 +36,6 @@
         <button id="tab-btn-profiles" class="tab-btn" onclick="showTab('profiles')">Profiles</button>
         <button id="tab-btn-settings" class="tab-btn" onclick="showTab('settings')">Settings</button>
 
-        <button class="nav-icon-btn" onclick="window.open('https://ko-fi.com/jonathanwenell', '_blank')"
-            title="Buy me a coffee!">☕</button>
         <button class="nav-icon-btn" onclick="openBugModal()" title="Report a bug">🪲</button>
     </nav>
 
@@ -66,6 +64,39 @@
                 </button>
             </form>
             <div id="bug-status" style="margin-top: 15px; text-align: center; font-size: 0.9rem; display: none;"></div>
+        </div>
+    </div>
+
+    <!-- Första gången appen startas (inga profiler + flaggan osatt): en kort
+         3-stegsguide. Visas ALDRIG för användare som redan har profiler. -->
+    <div id="onboarding-modal" class="modal">
+        <div class="modal-content" style="max-width: 520px; text-align: left;">
+            <h3 style="color: var(--accent-1); margin-top: 0; text-align: center;">👋 Welcome to True Borders!</h3>
+            <p style="font-size: 0.95rem; color: var(--text-muted); text-align: center; margin-bottom: 22px;">
+                Play windowed games without borders — three steps:</p>
+
+            <div class="modal-settings-group" style="display: flex; flex-direction: column; gap: 16px;">
+                <div style="display: flex; gap: 14px; align-items: flex-start;">
+                    <span style="font-family: var(--font-heading); font-size: 1.3rem; color: var(--accent-2);">1</span>
+                    <div><b style="color: var(--accent-1);">Pick your game.</b><br>
+                        <span style="font-size: 0.9rem; color: var(--text-muted);">Start a game in <b>Windowed</b> mode
+                            (not Fullscreen), then select it under <i>Target Game</i>.</span></div>
+                </div>
+                <div style="display: flex; gap: 14px; align-items: flex-start;">
+                    <span style="font-family: var(--font-heading); font-size: 1.3rem; color: var(--accent-2);">2</span>
+                    <div><b style="color: var(--accent-1);">Place it on the map.</b><br>
+                        <span style="font-size: 0.9rem; color: var(--text-muted);">Drag the <i>Game</i> box where you
+                            want the window — position and size apply live.</span></div>
+                </div>
+                <div style="display: flex; gap: 14px; align-items: flex-start;">
+                    <span style="font-family: var(--font-heading); font-size: 1.3rem; color: var(--accent-2);">3</span>
+                    <div><b style="color: var(--accent-1);">Save it once.</b><br>
+                        <span style="font-size: 0.9rem; color: var(--text-muted);">Hit <i>Save to Profile</i>. From now
+                            on True Borders applies it automatically every time the game starts.</span></div>
+                </div>
+            </div>
+
+            <button class="cyber-btn" style="width: 100%;" onclick="dismissOnboarding()">Let's go!</button>
         </div>
     </div>
 
@@ -327,12 +358,17 @@
                                 style="padding: 15px; border: 1px solid var(--bg-panel); border-radius: 8px; display: flex; justify-content: space-between; align-items: center; margin: 0;">
                                 <span style="font-weight: bold; color: var(--accent-1); font-family: var(--font-body);">
                                     Version <span id="app-version-display"
-                                        style="color: var(--text-color);">Laddar...</span>
+                                        style="color: var(--text-color);">Loading...</span>
                                 </span>
-                                <button class="neon-btn-small" onclick="manualUpdateCheck()"
-                                    title="Check for new updates" style="padding: 5px 12px; font-size: 14px;">
-                                    Sök uppdatering
-                                </button>
+                                <div style="display: flex; gap: 10px;">
+                                    <button class="neon-btn-small" onclick="eel.open_app_data_folder()()"
+                                        title="Open the folder with app.log and your profiles — attach app.log to bug reports"
+                                        style="padding: 5px 12px; font-size: 14px;">Open Logs</button>
+                                    <button id="update-check-btn" class="neon-btn-small" onclick="manualUpdateCheck()"
+                                        title="Check for new updates" style="padding: 5px 12px; font-size: 14px;">
+                                        Check for Updates
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>

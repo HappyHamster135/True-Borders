@@ -5,7 +5,7 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[('web', 'web'), ('updater.exe', '.')],
+    datas=[('web', 'web'), ('updater.exe', '.'), ('packaging/tb_icon_64.png', '.')],
     hiddenimports=[
         'webview.platforms.winforms',
         'webview.platforms.edgechromium',
@@ -29,7 +29,8 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,  # UPX-packade PyInstaller-exen triggar antivirus-falsklarm —
+                # oacceptabelt med betalande kunder ("Defender raderade appen"),
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,
@@ -38,4 +39,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon='packaging/trueborders.ico',
 )
