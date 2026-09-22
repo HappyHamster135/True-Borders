@@ -14,6 +14,7 @@ let realMonitorW = 0,
 let knownRunningGames = new Set();
 let manuallyRestoredGames = new Set();
 let isCurrentlyBorderlessSession = false; // Håller koll på om spelet faktiskt är applicerat just nu
+let savePromptBackedOff = false; // sparflödet erbjöds trots att borderless backade (fajt-spel)
 
 let currentGameToEdit = "";
 let resizeTimer;
@@ -383,6 +384,20 @@ async function initMap() {
           statusEl.innerText = note.message;
           statusEl.style.color = "var(--accent-2)";
         }
+      } else {
+        // Profilen sparades men borderless gick inte att applicera. Är det
+        // ett spel vi medvetet backade ur fajten mot (Graveyard Keeper 2)
+        // berättar vi HUR istället för att stansa "Saved & Applied!".
+        const backedOff = await eel.is_borderless_fight_game(windowName)();
+        if (backedOff) {
+          const statusEl = document.getElementById("status-polished");
+          if (statusEl) {
+            statusEl.innerText =
+              `ℹ️ Profile saved. "${windowName}" keeps re-adding its title bar — ` +
+              `launch it with the ▶ play button (borderless popup mode).`;
+            statusEl.style.color = "var(--accent-2)";
+          }
+        }
       }
     } else {
       // --- SCENARIO 2: NYTT SPEL — applicera + fråga om sparning ---
@@ -418,7 +433,30 @@ async function initMap() {
             statusEl.style.color = "var(--accent-2)";
           }
         }
+      }
 
+      // Erbjud profilsparning även när appen MEDVETET backade ur borderless-
+      // fajten (Graveyard Keeper 2): profilen är själva förutsättningen för
+      // att play-knappen ska kunna starta spelet med -popupwindow.
+      let backedOff = false;
+      if (!success) {
+        backedOff = await eel.is_borderless_fight_game(windowName)();
+      }
+
+      if (success || backedOff) {
+        savePromptBackedOff = backedOff;
+        const noteEl = document.getElementById("save-prompt-note");
+        if (noteEl) {
+          if (backedOff) {
+            noteEl.style.display = "block";
+            noteEl.innerText =
+              `"${windowName}" couldn't be made borderless right now — the game re-adds its title bar. ` +
+              `Save the profile anyway and launch it with the ▶ play button, which starts it in borderless popup mode.`;
+          } else {
+            noteEl.style.display = "none";
+            noteEl.innerText = "";
+          }
+        }
         // Fråga om användaren vill spara profilen — BARA för nya spel
         document.getElementById("prompt-game-name").innerText = windowName;
         document.getElementById("save-prompt-modal").style.display = "block";
@@ -2430,7 +2468,9 @@ async function handleSavePrompt(shouldSave) {
     modal.style.display = "none";
     modal.classList.remove("closing");
     document.getElementById("status-polished").innerText = shouldSave
-      ? "Profile saved and applied!"
+      ? (savePromptBackedOff
+          ? "Profile saved! Launch it with the ▶ play button to go borderless."
+          : "Profile saved and applied!")
       : "Applied without saving.";
   }, 250);
 }

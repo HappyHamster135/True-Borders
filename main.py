@@ -41,7 +41,7 @@ except Exception:
 # 1. GLOBALA VARIABLER & INITIALISERING
 # ==============================================================================================
 
-CURRENT_VERSION = "1.4.2"
+CURRENT_VERSION = "1.4.3"
 UPDATE_INFO_URL = "https://raw.githubusercontent.com/HappyHamster135/True-Borders/main/update.json"
 
 
@@ -1179,6 +1179,18 @@ def find_real_game_window(search_title):
     best = found_hwnds[0][0]
     _remember_window(search_title, best)
     return best
+
+@eel.expose
+def is_borderless_fight_game(window_title):
+    """True om det levande fönstret är ett spel appen medvetet backar ur
+    borderless-fajten mot (Graveyard Keeper 2: ramen återställs ändå, så
+    appen rör den inte). Frontend använder det för att erbjuda
+    profilsparning även när APPLY inte kunde göra spelet borderless."""
+    hwnd = find_real_game_window(window_title)
+    if hwnd == 0:
+        return False
+    return game_fixes.skip_borderless_fight(hwnd)
+
 
 @eel.expose
 def is_game_running(title):

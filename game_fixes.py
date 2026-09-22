@@ -494,13 +494,24 @@ def launch_args_for(game_name=None, profile=None):
 
 
 def skip_borderless_fight(hwnd):
-    """True för spel där caption-strip-loopen är förlorad på förhand.
+    """True när fönstret är ett GK2-fönster MED ram kvar — det vill säga
+    en fajt appen inte kan vinna.
 
-    GK2 räknas alltid hit: körs spelet i popup-läge finns det ändå ingen
-    ram att slåss om, och monitor-loopens aggressiva reaply gör mer skada än
-    nytta (den matar den egna storleksmätningen fel — se modulens docstring).
+    Caption-gatingen är avgörande: körs spelet med -popupwindow (via
+    play-knappen) finns ingen ram, och då ska appen ta det vanliga flödet —
+    adoptera fönstret, applicera profilens geometri och hålla positionen.
+    Utan den här kollen vägrade appen även ramlösa popup-fönster och
+    ▶-starten gjorde aldrig spelet borderless.
+
     Alla andra spel: False, exakt samma beteende som idag."""
-    return is_graveyard_keeper_2(hwnd)
+    if not is_graveyard_keeper_2(hwnd):
+        return False
+    try:
+        style = win32gui.GetWindowLong(hwnd, GWL_STYLE)
+        return bool(style & WS_CAPTION)
+    except Exception:
+        # Vet vi inte är det säkrare att backa än att röra
+        return True
 
 
 def gk2_hint_and_remember(profile_name, hwnd):
