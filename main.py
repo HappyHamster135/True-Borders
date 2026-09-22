@@ -41,7 +41,7 @@ except Exception:
 # 1. GLOBALA VARIABLER & INITIALISERING
 # ==============================================================================================
 
-CURRENT_VERSION = "1.4.1"
+CURRENT_VERSION = "1.4.2"
 UPDATE_INFO_URL = "https://raw.githubusercontent.com/HappyHamster135/True-Borders/main/update.json"
 
 
@@ -588,6 +588,7 @@ def launch_game(game_name):
         exe_path = profile.get('exePath')
         if exe_path and os.path.exists(exe_path):
             try:
+                print(f"[LAUNCH] '{game_name}': startar exe direkt med {extra_args}")
                 proc = subprocess.Popen([exe_path] + list(extra_args),
                                         cwd=os.path.dirname(exe_path))
                 # Steamworks-spel startade direkt fungerar när Steam-klienten
@@ -601,9 +602,13 @@ def launch_game(game_name):
                         break
                     time.sleep(0.25)
                 if proc.poll() is None:
+                    print(f"[LAUNCH] '{game_name}': processen lever med {extra_args}")
                     return True
-            except Exception:
-                pass    # exe:n vägrade — fall igenom till steam:// nedan
+                print(f"[LAUNCH] '{game_name}': exe-processen dog direkt "
+                      f"(kod {proc.returncode}) — faller tillbaka till steam://")
+            except Exception as e:
+                print(f"[LAUNCH] '{game_name}': exe-start misslyckades ({e}) — "
+                      f"faller tillbaka till steam://")
 
     # Steam-spel startas via Steam-protokollet — robustare än att köra exe:n
     # direkt (DRM-omstart via Steam, rätt launch-options, osv).
@@ -1330,7 +1335,8 @@ def init_borderless(window_title, ui_x=None, ui_y=None, ui_w=None, ui_h=None):
         flags = win32con.SWP_NOZORDER | win32con.SWP_NOACTIVATE
         win32gui.SetWindowPos(hwnd, 0, int(target_x), int(target_y), int(target_w), int(target_h), flags)
     else:
-        flags = win32con.SWP_NOZORDER | win32con.SWP_NOACTIVATE
+        flags = win32con.SWP_NOZORDER | win32con.SWP_NOACTIVATE | \
+            game_fixes.extra_move_flags(hwnd, target_w, target_h)
         win32gui.SetWindowPos(hwnd, 0, int(target_x), int(target_y), int(target_w), int(target_h), flags)
 
     global last_intentional_move_ts
@@ -1492,7 +1498,12 @@ def update_window_pos(window_title, x, y, w, h):
     if hwnd != 0:
         want_w, want_h = w, h
         w, h = game_fixes.adjust_client_size(hwnd, w, h)
-        flags = 0x0004 | 0x0010 | 0x4000
+        flags = 0x0004 | 0x0010 | 0x4000 | game_fixes.extra_move_flags(hwnd, w, h)
+        # GK2 återställer fönstret till sin sparade Unity-position när det
+        # flyttas utifrån — peka spelets egna register på vår position först
+        # (se game_fixes.sync_gk2_window_position).
+        if game_fixes.is_graveyard_keeper_2(hwnd):
+            game_fixes.sync_gk2_window_position(int(x), int(y))
         success = safe_set_window_pos(hwnd, 0, int(x), int(y), int(w), int(h), flags, window_title)
 
         if not success:
@@ -1519,7 +1530,8 @@ def force_reapply_borderless(hwnd, x, y, w, h):
     w, h = game_fixes.adjust_client_size(hwnd, w, h)
     style = win32gui.GetWindowLong(hwnd, GWL_STYLE)
     if not (style & WS_CAPTION):
-        flags = SWP_NOZORDER | win32con.SWP_NOACTIVATE
+        flags = SWP_NOZORDER | win32con.SWP_NOACTIVATE | \
+            game_fixes.extra_move_flags(hwnd, w, h)
         win32gui.SetWindowPos(hwnd, 0, int(x), int(y), int(w), int(h), flags)
     else:
         new_style = style & ~(WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU | 0x00800000)

@@ -48,6 +48,7 @@ import json
 import os
 import re
 import shutil
+import winreg
 from ctypes import wintypes
 
 import win32api
@@ -516,6 +517,58 @@ def gk2_hint_and_remember(profile_name, hwnd):
         "Launch it with the \u25b6 play button in True Borders instead "
         "(opens in borderless popup mode)."
     )
+
+
+_GK2_REG_PATH = r"Software\Lazy Bear Games\Graveyard Keeper 2"
+
+
+def sync_gk2_window_position(x, y):
+    """Skriver målpositionen till Unitys egna \"Screenmanager Window Position\"
+    -registervärden.
+
+    GK2 återställer sitt fönster till sin sparade position när det flyttas
+    utifrån — den återställningen är anledningen till att fönstret \"hoppar
+    tillbaka till mitten\". Pekar registret på vår position finns inget att
+    hoppa tillbaka till. Läser spelet det först vid nästa start (vet ej än)
+    startar det helt enkelt där användaren senast ville ha det — aldrig skada.
+
+    Värdenamnen har Unity-hashade suffix (_h########), så vi enumrerar och
+    matchar på prefixet istället för att gissa suffixet."""
+    try:
+        k = winreg.OpenKey(winreg.HKEY_CURRENT_USER, _GK2_REG_PATH, 0,
+                           winreg.KEY_SET_VALUE | winreg.KEY_QUERY_VALUE)
+        try:
+            for i in range(winreg.QueryInfoKey(k)[1]):
+                name, _, _ = winreg.EnumValue(k, i)
+                if name.startswith("Screenmanager Window Position X_"):
+                    winreg.SetValueEx(k, name, 0, winreg.REG_DWORD, int(x))
+                elif name.startswith("Screenmanager Window Position Y_"):
+                    winreg.SetValueEx(k, name, 0, winreg.REG_DWORD, int(y))
+        finally:
+            winreg.CloseKey(k)
+    except Exception:
+        pass
+
+
+def extra_move_flags(hwnd, new_w=None, new_h=None):
+    """Extra SetWindowPos-flaggor för spel som kämpar emot rena flyttar.
+
+    GK2: SWP_NOSENDCHANGING — fönstret flyttas utan att spelets WndProc får
+    WM_WINDOWPOSCHANGING, så positionsåterställningen triggas aldrig. Gäller
+    BARA rena flyttar: ändras även storleken måste spelet få veta om det
+    (Unity måste bygga om sin swapchain), då returneras 0.
+
+    Alla andra spel: 0 — exakt samma beteende som idag."""
+    if not is_graveyard_keeper_2(hwnd):
+        return 0
+    if new_w is not None and new_h is not None:
+        try:
+            r = win32gui.GetWindowRect(hwnd)
+            if (r[2] - r[0], r[3] - r[1]) != (int(new_w), int(new_h)):
+                return 0
+        except Exception:
+            return 0
+    return 0x0400  # SWP_NOSENDCHANGING
 
 
 def forget_window(hwnd):
