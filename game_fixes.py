@@ -414,7 +414,115 @@ def skip_frame_nudge(hwnd):
     return is_prison_architect(hwnd)
 
 
+"""
+GRAVEYARD KEEPER 2
+==================
+GK2 (Unity 6) återställer WS_CAPTION så fort ett externt program tar bort den
+i windowed mode. Unity synkar sin fönsterstil mot valt läge (registry
+"Screenmanager Fullscreen mode" = 3/windowed) och lägger tillbaka ramen —
+appen och spelet hamnar då i en evig krigsloop: caption -> strip -> caption,
+och eftersom klientytan mäts mellan varven matas storleken fel (2544x1401,
+2528x1362 ... en ramruta mindre per varv). Det går inte att vinna utifrån.
+
+Fix: starta spelet med Unity-flaggan `-popupwindow`. Då bygger Unity fönstret
+som popup (borderless) från början och hävdar aldrig någon ram — appen behöver
+bara flytta/storlekssätta det som vanligt. Samma lösning communityn använder
+för Graveyard Keeper 1 ("Set Launch Options -> -popupwindow").
+
+Kör någon spelet UTAN flaggan (t.ex. direkt från Steam) backar appen istället:
+den tar inte fajten mot ramen (skip_borderless_fight) och ber användaren starta
+via profilens play-knapp.
+"""
+
+_GK2_EXES = {
+    "graveyardkeeper2.exe",
+}
+
+# hwnd -> True/False (samma cache-regel som PA: cacha aldrig ett nej på ett
+# fönster som hann dö mitt i kollen)
+_is_gk2_cache = {}
+
+# (profilnamn, hwnd) som redan fått play-knapps-ledtråden — ingen spam
+_gk2_hinted = set()
+
+
+def is_graveyard_keeper_2(hwnd):
+    """Snabb identitetskoll på exe-namnet. Klassnamnet duger INTE — alla
+    Unity-spel heter UnityWndClass, så där fastnar alla möjliga andra titlar."""
+    if not hwnd:
+        return False
+    cached = _is_gk2_cache.get(hwnd)
+    if cached is not None:
+        return cached
+    try:
+        _, pid = win32process.GetWindowThreadProcessId(hwnd)
+        if not pid:
+            return False
+    except Exception:
+        return False
+    base = _exe_basename(hwnd)
+    # _exe_basename returnerar \"\" både vid misslyckad uppslagning och för
+    # fönster som hann dö — cacha inget av de fallen (se PA-noten).
+    if not base:
+        return False
+    result = base in _GK2_EXES
+    _is_gk2_cache[hwnd] = result
+    return result
+
+
+def is_gk2_profile(profile):
+    """True om profilen pekar på Graveyard Keeper 2:s exe (titel-oberoende)."""
+    try:
+        exe = (profile or {}).get('exePath')
+        return bool(exe) and os.path.basename(str(exe)).lower() in _GK2_EXES
+    except Exception:
+        return False
+
+
+def launch_args_for(game_name=None, profile=None):
+    """Extra startargument för en profil. ['-popupwindow'] för GK2, annars
+    None (start via steam:// / exe precis som förut).
+
+    gating bör helst ske på profilens exePath (robust mot titeländringar),
+    med namnet som reserv för profiler som ännu inte sparat sin exe-sökväg."""
+    if profile and is_gk2_profile(profile):
+        return ['-popupwindow']
+    if game_name and str(game_name).strip().lower() == 'graveyard keeper 2':
+        return ['-popupwindow']
+    return None
+
+
+def skip_borderless_fight(hwnd):
+    """True för spel där caption-strip-loopen är förlorad på förhand.
+
+    GK2 räknas alltid hit: körs spelet i popup-läge finns det ändå ingen
+    ram att slåss om, och monitor-loopens aggressiva reaply gör mer skada än
+    nytta (den matar den egna storleksmätningen fel — se modulens docstring).
+    Alla andra spel: False, exakt samma beteende som idag."""
+    return is_graveyard_keeper_2(hwnd)
+
+
+def gk2_hint_and_remember(profile_name, hwnd):
+    """Ledtråd om att GK2 måste startas via appens play-knapp. Returnerar
+    meddelandet första gången per (namn, hwnd), sedan None (ingen spam)."""
+    if not is_graveyard_keeper_2(hwnd):
+        return None
+    key = (profile_name, hwnd)
+    if key in _gk2_hinted:
+        return None
+    _gk2_hinted.add(key)
+    return (
+        "This game re-adds its title bar when started from Steam directly. "
+        "Launch it with the \u25b6 play button in True Borders instead "
+        "(opens in borderless popup mode)."
+    )
+
+
 def forget_window(hwnd):
     """Städa cachen när ett fönster försvinner."""
-    for cache in (_is_pa_cache, _native_size_cache, _pinned_ref_h, _logged):
+    for cache in (_is_pa_cache, _native_size_cache, _pinned_ref_h, _logged,
+                  _is_gk2_cache):
         cache.pop(hwnd, None)
+    for key in list(_gk2_hinted):
+        if key[1] == hwnd:
+            _gk2_hinted.discard(key)

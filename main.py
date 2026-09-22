@@ -41,7 +41,7 @@ except Exception:
 # 1. GLOBALA VARIABLER & INITIALISERING
 # ==============================================================================================
 
-CURRENT_VERSION = "1.4.0"
+CURRENT_VERSION = "1.4.1"
 UPDATE_INFO_URL = "https://raw.githubusercontent.com/HappyHamster135/True-Borders/main/update.json"
 
 
@@ -577,6 +577,33 @@ def launch_game(game_name):
         force_terraria_windowed(game_name)
     except Exception:
         pass
+
+    # Spel som kräver egna startargument (Graveyard Keeper 2 behöver Unity-
+    # flaggan -popupwindow, annars återställer spelet sin ram gång på gång —
+    # se game_fixes). Flaggan når aldrig spelet via steam://rungameid, så de
+    # här titlarna startas direkt via sin exe. Steamworks ansluter ändå till
+    # den redan körande Steam-klienten (spelet står kvar i biblioteket osv).
+    extra_args = game_fixes.launch_args_for(game_name, profile)
+    if extra_args:
+        exe_path = profile.get('exePath')
+        if exe_path and os.path.exists(exe_path):
+            try:
+                proc = subprocess.Popen([exe_path] + list(extra_args),
+                                        cwd=os.path.dirname(exe_path))
+                # Steamworks-spel startade direkt fungerar när Steam-klienten
+                # redan kör. Dör processen nästan direkt vill spelet bli
+                # startat av Steam (RestartAppIfNecessary / instansvakt / DRM)
+                # och flaggan är ändå förlorad — fall då tillbaka till
+                # steam:// nedan; appens skydd mot ramfajten tar över.
+                deadline = time.time() + 8
+                while time.time() < deadline:
+                    if proc.poll() is not None:
+                        break
+                    time.sleep(0.25)
+                if proc.poll() is None:
+                    return True
+            except Exception:
+                pass    # exe:n vägrade — fall igenom till steam:// nedan
 
     # Steam-spel startas via Steam-protokollet — robustare än att köra exe:n
     # direkt (DRM-omstart via Steam, rätt launch-options, osv).
@@ -1234,6 +1261,24 @@ def init_borderless(window_title, ui_x=None, ui_y=None, ui_w=None, ui_h=None):
         print(f"[INIT] '{window_title}' svarar inte på fönstermeddelanden — hoppar över")
         return False
 
+    # Graveyard Keeper 2 (Unity windowed) lägger tillbaka ramen direkt efter
+    # att vi tar bort den — den striden går inte att vinna utifrån. Körs spelet
+    # med ram (startat utan appens -popupwindow) backar vi och visar ledtråden
+    # i UI:t istället för att hamna i strip/ram-loop.
+    if game_fixes.skip_borderless_fight(hwnd):
+        hint = game_fixes.gk2_hint_and_remember(window_title, hwnd)
+        if hint:
+            # Skannern försöker om vart 2,5:e sekund upp till 10 min — logga
+            # och tipsa bara första gången per fönster, annars tvättas app.log
+            # sönder. 
+            print(f"[INIT] '{window_title}' (Graveyard Keeper 2) körs med ram — "
+                  f"strider inte; starta via appens play-knapp (-popupwindow)")
+            try:
+                eel.show_game_hint(window_title, hint)()
+            except Exception:
+                pass
+        return False
+
     profile = get_profile(window_title)
     rect = win32gui.GetWindowRect(hwnd)
     client_rect = win32gui.GetClientRect(hwnd)
@@ -1419,8 +1464,7 @@ def toggle_borderless(window_title):
 
     style = win32gui.GetWindowLong(hwnd, GWL_STYLE)
     if style & WS_CAPTION:
-        init_borderless(window_title)
-        return "borderless"
+        return "borderless" if init_borderless(window_title) else "not_found"
     else:
         restore_borders(window_title)
         return "restored"
@@ -2788,7 +2832,8 @@ def taskbar_monitor():
                     if style & WS_CAPTION:
                         caption_returned = True
 
-                if (caption_returned or drifted) and has_coords:
+                if (caption_returned or drifted) and has_coords and \
+                        not game_fixes.skip_borderless_fight(hwnd):
                     cur_x, cur_y = rect[0], rect[1]
                     cur_w, cur_h = rect[2] - rect[0], rect[3] - rect[1]
                     time_since = time.time() - last_intentional_move_ts

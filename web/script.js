@@ -2059,25 +2059,36 @@ function notify_blocked_game(gameName, alreadyAdmin) {
       `also needs to run as administrator.`;
   }
   document.getElementById("admin-required-modal").style.display = "flex";
-}
-
-async function restartAsAdmin() {
-  closeAdminModal();
-
-  const statusEl = document.getElementById("status-polished");
-  if (statusEl) {
-    statusEl.innerText = "Restarting as administrator...";
-    statusEl.style.color = "var(--accent-1)";
   }
 
-  const success = await eel.restart_as_admin()();
-  if (success === false) {
+  // Ledtråd för spel som backar ut borderless-fajten (se game_fixes.py:
+  // Graveyard Keeper 2). Anropas från Python — texten visas i statusraden.
+  eel.expose(show_game_hint);
+  function show_game_hint(gameName, message) {
+    const statusEl = document.getElementById("status-polished");
     if (statusEl) {
-      statusEl.innerText = "Restart cancelled.";
-      statusEl.style.color = "var(--text-muted)";
+      statusEl.innerText = `💡 ${gameName}: ${message}`;
+      statusEl.style.color = "var(--accent-2)";
     }
   }
-}
+
+  async function restartAsAdmin() {
+    closeAdminModal();
+
+    const statusEl = document.getElementById("status-polished");
+    if (statusEl) {
+      statusEl.innerText = "Restarting as administrator...";
+      statusEl.style.color = "var(--accent-1)";
+    }
+
+    const success = await eel.restart_as_admin()();
+    if (success === false) {
+      if (statusEl) {
+        statusEl.innerText = "Restart cancelled.";
+        statusEl.style.color = "var(--text-muted)";
+      }
+    }
+  }
 
 function closeAdminModal() {
   document.getElementById("admin-required-modal").style.display = "none";
